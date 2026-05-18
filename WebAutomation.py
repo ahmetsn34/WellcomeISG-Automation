@@ -123,7 +123,7 @@ def otomasyonu_baslat():
         return
 
     mail_adresi = "denemehesapserver@gmail.com"
-    mail_sifresi = "vkvkuqoztwxzhlzr"
+    mail_sifresi = "gzcgiofiqyenwztd"
     sitenin_mail_adresi = "wellcomebilgilendirme@danteteknoloji.com"
 
     chrome_options = Options()
