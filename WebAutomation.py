@@ -35,13 +35,12 @@ def txt_den_verileri_al(dosya_yolu):
         print(f"Hata: {dosya_yolu} bulunamadı!")
         return []
 
-# --- 2. MAİLDEN KOD ÇEKME (Güncellenmiş IMAP) ---
+# --- 2. MAİLDEN KOD ÇEKME ---
 def mailden_kodu_al(mail_adresi, mail_sifresi, gonderici_adresi):
     print("Mail kutusu dinleniyor...")
 
     IMAP_SUNUCULARI = [
-        ('imap-mail.outlook.com', 993),
-        ('outlook.office365.com', 993),
+        ('imap.gmail.com', 993)
     ]
 
     mail_sunucusu = None
@@ -52,27 +51,20 @@ def mailden_kodu_al(mail_adresi, mail_sifresi, gonderici_adresi):
             mail_sunucusu.login(mail_adresi, mail_sifresi)
             print(f"  -> Bağlantı başarılı: {sunucu}")
             break
-        except imaplib.IMAP4.error as e:
-            print(f"  -> {sunucu} başarısız: {e}")
-            mail_sunucusu = None
         except Exception as e:
-            print(f"  -> {sunucu} bağlantı hatası: {e}")
+            print(f"  -> {sunucu} başarısız oldu. Hata: {e}")
             mail_sunucusu = None
 
     if mail_sunucusu is None:
         print("HATA: Hiçbir IMAP sunucusuna bağlanılamadı!")
-        print("Çözüm önerileri:")
-        print("  1) outlook.com > Ayarlar > Posta > E-posta senkronizasyonu > IMAP'ı aç")
-        print("  2) Microsoft hesabında 'Uygulama şifresi' oluştur")
-        print("  3) Hesapta 2FA varsa normal şifre yerine uygulama şifresi kullan")
         return None
 
     try:
         for deneme in range(12):  # 60 saniye bekler
             mail_sunucusu.select("inbox")
-            durum, veriler = mail_sunucusu.search(
-                None, f'(UNSEEN FROM "{gonderici_adresi}")'
-            )
+            
+            # Sadece OKUNMAMIŞ (UNSEEN) mailleri listeliyoruz
+            durum, veriler = mail_sunucusu.search(None, 'UNSEEN')
             mail_idleri = veriler[0].split()
 
             if mail_idleri:
@@ -82,58 +74,60 @@ def mailden_kodu_al(mail_adresi, mail_sifresi, gonderici_adresi):
                 for response_part in mail_verisi:
                     if isinstance(response_part, tuple):
                         mesaj = email.message_from_bytes(response_part[1])
+                        
+                        # Gönderici veya başlık kontrolü
+                        gonderen = mesaj.get('From', '')
+                        if gonderici_adresi.lower() in gonderen.lower() or "danteteknoloji" in gonderen.lower():
+                            
+                            icerik = ""
+                            if mesaj.is_multipart():
+                                for parca in mesaj.walk():
+                                    if parca.get_content_type() in ("text/plain", "text/html"):
+                                        try:
+                                            icerik += parca.get_payload(decode=True).decode(
+                                                parca.get_content_charset() or "utf-8", errors="ignore"
+                                            )
+                                        except:
+                                            pass
+                            else:
+                                icerik = mesaj.get_payload(decode=True).decode(
+                                    mesaj.get_content_charset() or "utf-8", errors="ignore"
+                                )
 
-                        icerik = ""
-                        if mesaj.is_multipart():
-                            for parca in mesaj.walk():
-                                content_type = parca.get_content_type()
-                                if content_type in ("text/plain", "text/html"):
-                                    try:
-                                        icerik += parca.get_payload(decode=True).decode(
-                                            parca.get_content_charset() or "utf-8",
-                                            errors="ignore"
-                                        )
-                                    except Exception:
-                                        pass
-                        else:
-                            icerik = mesaj.get_payload(decode=True).decode(
-                                mesaj.get_content_charset() or "utf-8",
-                                errors="ignore"
-                            )
-
-                        kod_eslesme = re.search(r'\b\d{6}\b', icerik)
-                        if kod_eslesme:
-                            dogrulama_kodu = kod_eslesme.group(0)
-                            print(f"  -> Kod bulundu: {dogrulama_kodu}")
-                            mail_sunucusu.logout()
-                            return dogrulama_kodu
+                            # 4 VEYA 6 HANELİ ŞİFRELERİN TÜMÜNÜ HAVADA KAPAR
+                            kod_eslesme = re.search(r'\b\d{4,6}\b', icerik)
+                            if kod_eslesme:
+                                dogrulama_kodu = kod_eslesme.group(0)
+                                print(f"  -> Kod bulundu: {dogrulama_kodu}")
+                                return dogrulama_kodu
 
             print(f"  -> Mail bekleniyor... ({(deneme+1)*5}/60 sn)")
             time.sleep(5)
-
+            
     except Exception as e:
         print(f"Mail okuma hatası: {e}")
+    finally:
+        try:
+            mail_sunucusu.logout()
+        except:
+            pass
 
-    mail_sunucusu.logout()
     print("Uyarı: 60 saniye içinde mail gelmedi.")
     return None
 
 # --- 3. ANA DÖNGÜ ---
 def otomasyonu_baslat():
-    hedef_veriler = txt_den_verileri_al(r"C:\Users\DELL\Deneme.txt")
+    dosya_yolu = r"C:\Users\DELL\Deneme.txt"
+    hedef_veriler = txt_den_verileri_al(dosya_yolu)
     if not hedef_veriler:
         return
 
-    # Mail Ayarları
-    mail_adresi = "mrpasa60@outlook.com.tr"
-    mail_sifresi = "just_dont"
-    sitenin_mail_adresi = "noreply@wellcome.com"
+    mail_adresi = "denemehesapserver@gmail.com"
+    mail_sifresi = "vkvkuqoztwxzhlzr"
+    sitenin_mail_adresi = "wellcomebilgilendirme@danteteknoloji.com"
 
-    # Tarayıcı Ayarları
     chrome_options = Options()
-    chrome_options.add_experimental_option(
-        "prefs", {"profile.managed_default_content_settings.images": 2}
-    )
+    chrome_options.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": 2})
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
     bekleme = WebDriverWait(driver, 20)
@@ -151,9 +145,7 @@ def otomasyonu_baslat():
 
                 # Şirket Kodu
                 print("Adım 2: Şirket kodu yazılıyor...")
-                sirket_kutusu = bekleme.until(
-                    EC.presence_of_element_located((By.ID, "FirmCode"))
-                )
+                sirket_kutusu = bekleme.until(EC.presence_of_element_located((By.ID, "FirmCode")))
                 sirket_kutusu.clear()
                 sirket_kutusu.send_keys(veri["sirket"])
                 print("-> Şirket kodu yazıldı.")
@@ -163,9 +155,7 @@ def otomasyonu_baslat():
                 print("Adım 3: Kullanıcı adı yazılıyor...")
                 for _ in range(5):
                     try:
-                        kullanici_kutusu = bekleme.until(
-                            EC.element_to_be_clickable((By.ID, "Username"))
-                        )
+                        kullanici_kutusu = bekleme.until(EC.element_to_be_clickable((By.ID, "Username")))
                         kullanici_kutusu.clear()
                         kullanici_kutusu.send_keys(veri["kullanici"])
                         break
@@ -177,9 +167,7 @@ def otomasyonu_baslat():
                 print("Adım 4: Şifre yazılıyor...")
                 for _ in range(5):
                     try:
-                        sifre_kutusu = bekleme.until(
-                            EC.element_to_be_clickable((By.ID, "Password"))
-                        )
+                        sifre_kutusu = bekleme.until(EC.element_to_be_clickable((By.ID, "Password")))
                         sifre_kutusu.clear()
                         sifre_kutusu.send_keys(veri["sifre"])
                         break
@@ -189,35 +177,55 @@ def otomasyonu_baslat():
 
                 # Giriş Butonu
                 print("Adım 5: Giriş butonuna tıklanıyor...")
-                bekleme.until(
-                    EC.element_to_be_clickable((By.ID, "loginButton"))
-                ).click()
+                bekleme.until(EC.element_to_be_clickable((By.ID, "loginButton"))).click()
 
-                # Doğrulama Kodu
+                # Doğrulama Kodu Bekleme Aşaması
                 print("Adım 6: Mail'den doğrulama kodu bekleniyor...")
-                dogrulama_kodu = mailden_kodu_al(
-                    mail_adresi, mail_sifresi, sitenin_mail_adresi
-                )
+                dogrulama_kodu = mailden_kodu_al(mail_adresi, mail_sifresi, sitenin_mail_adresi)
 
                 if dogrulama_kodu:
-                    kod_kutusu = bekleme.until(
-                        EC.presence_of_element_located((By.ID, "VerificationCode"))
-                    )
+                    kod_kutusu = bekleme.until(EC.presence_of_element_located((By.ID, "VerificationCode")))
                     kod_kutusu.clear()
                     kod_kutusu.send_keys(dogrulama_kodu)
                     time.sleep(1)
-                    kod_kutusu.send_keys(Keys.ENTER)
-                    time.sleep(3)
+                    
+                    # --- GÜNCELLENEN ID'SİZ <A> ETİKETİ TIKLAMA AYARI ---
+                    print("-> Doğrulama butonuna tıklanıyor...")
+                    tıklandı = False
+                    
+                    # Alternatif 1: Gönderdiğin özel class yapısına göre CSS Seçici ile bulmayı dener
+                    try:
+                        css_seçici = "a.btn.btn-sms-verification.btn-block.btn-lg.btn-primary.text-uppercase"
+                        yeşil_buton = bekleme.until(EC.element_to_be_clickable((By.CSS_SELECTOR, css_seçici)))
+                        yeşil_buton.click()
+                        tıklandı = True
+                    except Exception:
+                        pass
+                        
+                    # Alternatif 2: Eğer class'lar değişirse, buton metni üzerinden (Doğrula ve Giriş Yap) dener
+                    if not tıklandı:
+                        try:
+                            yeşil_buton = bekleme.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Doğrula ve Giriş Yap')]")))
+                            yeşil_buton.click()
+                            tıklandı = True
+                        except Exception:
+                            pass
+                    
+                    # Alternatif 3: Eğer yukarıdakilerin hiçbiri tıklayamazsa, son çare enter tuşlar
+                    if not tıklandı:
+                        kod_kutusu.send_keys(Keys.ENTER)
+                    
+                    time.sleep(5)  # Giriş başarılı olduktan sonra ana panelin yüklenmesini bekle
                     basarili_sayisi += 1
-                    print(f"✅ Başarılı! {veri['kullanici']} giriş yaptı.")
+                    print(f"✅ Başarılı! {veri['kullanici']} sisteme tamamen giriş yaptı.")
                 else:
-                    print(f"⚠️ {veri['kullanici']} için mail gelmedi, atlanıyor.")
+                    print(f"⚠️ {veri['kullanici']} için mail kodu bulunamadı, atlanıyor.")
 
             except Exception as e:
                 print(f"❌ Hata: {e}")
                 continue
 
-        print(f"\nToplam {len(hedef_veriler)} verinin {basarili_sayisi} tanesine giriş yapıldı.")
+        print(f"\nToplam {len(hedef_veriler)} verinin {basarili_sayisi} tanesine başarıyla giriş yapıldı.")
 
     finally:
         input("\n[!] Tarayıcıyı kapatmak için ENTER'a bas...")
