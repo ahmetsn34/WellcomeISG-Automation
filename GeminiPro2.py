@@ -65,7 +65,7 @@ class WellcomeAutomationApp(ctk.CTk):
 
         # Hassas Bilgiler (.env'den çekilir)
         self.gmail_address: str = os.getenv('GMAIL_ADDRESS', 'denemehesapserver@gmail.com')
-        self.gmail_password: str = os.getenv('GMAIL_PASSWORD', 'slynpgdwjfcrrpcq')
+        self.gmail_password: str = os.getenv('GMAIL_PASSWORD', '')
         self.site_email: str = os.getenv('SITE_EMAIL', 'https://wellcome.azurewebsites.net/pnlwell/login/')
 
         self._build_ui()
