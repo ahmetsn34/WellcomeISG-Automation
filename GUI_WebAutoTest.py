@@ -206,7 +206,7 @@ class WellcomeAutomationApp(ctk.CTk):
             return
 
         mail_adresi = "denemehesapserver@gmail.com"
-        mail_sifresi = "slynpgdwjfcrrpcq" # <--- BURAYA YENİ ALDIĞIN ŞİFREYİ ÇAK KANKA
+        mail_sifresi = "slynpgdwjfcrrpcq"
         sitenin_mail_adresi = "wellcomebilgilendirme@danteteknoloji.com"
 
         chrome_options = Options()
