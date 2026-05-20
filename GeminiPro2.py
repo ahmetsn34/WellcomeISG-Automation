@@ -8,6 +8,7 @@ import json
 import threading
 import queue
 import logging
+import winsound  # --- SES SİSTEMİ İÇİN EKLENDİ ---
 from datetime import datetime
 from typing import Optional, Dict, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,10 +17,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+
+# --- UNDETECTED CHROMEDRIVER (GÖRÜNMEZLİK PELERİNİ) EKLENDİ ---
+import undetected_chromedriver as uc 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -51,7 +51,7 @@ class WellcomeAutomationApp(ctk.CTk):
         self.resizable(True, True) 
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
-        # Dosya yolları (Ayarlar ve Checkpoint)
+        # Dosya yolları 
         self.settings_file = "settings.json"
         self.checkpoint_file = "checkpoint.json"
 
@@ -63,8 +63,6 @@ class WellcomeAutomationApp(ctk.CTk):
         self.concurrent_var = tk.BooleanVar(value=False)
         self.pause_event = threading.Event()
         self.pause_event.set()
-        
-        # Checkpoint (Kaldığı yerden devam) kilidi
         self.checkpoint_lock = threading.Lock()
 
         # Hassas Bilgiler
@@ -73,14 +71,14 @@ class WellcomeAutomationApp(ctk.CTk):
         self.site_email: str = os.getenv('SITE_EMAIL', 'https://wellcome.azurewebsites.net/pnlwell/login/')
 
         self._build_ui()
-        self._load_settings() # Program açılışında eski ayarları yükle
+        self._load_settings() 
         logger.info("Application started")
 
     def _build_ui(self) -> None:
         top_container = ctk.CTkFrame(self, fg_color="transparent")
         top_container.pack(side="top", fill="x", padx=10, pady=5)
 
-        title_label = ctk.CTkLabel(top_container, text="Wellcome Advanced Automation System", font=ctk.CTkFont(size=22, weight="bold"))
+        title_label = ctk.CTkLabel(top_container, text="Wellcome Premium Automation", font=ctk.CTkFont(size=22, weight="bold"))
         title_label.pack(pady=10)
 
         file_frame = ctk.CTkFrame(top_container)
@@ -148,9 +146,19 @@ class WellcomeAutomationApp(ctk.CTk):
         self.log_text.tag_config("warning", foreground="#f1c40f")
         self.log_text.configure(state="disabled")
 
-    # --- AYARLARI KAYDETME VE YÜKLEME ---
+    def _play_sound(self, sound_type: str):
+        """İşlemlere göre Windows uyarı sesleri çalar."""
+        try:
+            if sound_type == "error":
+                winsound.MessageBeep(winsound.MB_ICONHAND) # Kritik Hata sesi
+            elif sound_type == "success":
+                pass # Her hesapta çalması rahatsız edebilir diye boş bıraktık
+            elif sound_type == "finish":
+                winsound.PlaySound("SystemExit", winsound.SND_ALIAS) # Bitiş sesi
+        except:
+            pass
+
     def _load_settings(self):
-        """Program açılışında son ayarları geri yükler."""
         if os.path.exists(self.settings_file):
             try:
                 with open(self.settings_file, "r") as f:
@@ -162,7 +170,6 @@ class WellcomeAutomationApp(ctk.CTk):
                     
                     self.retry_spinbox.delete(0, tk.END)
                     self.retry_spinbox.insert(0, settings.get("retry", str(config.DEFAULT_MAIL_RETRY_ATTEMPTS)))
-                    
                     self.timeout_spinbox.delete(0, tk.END)
                     self.timeout_spinbox.insert(0, settings.get("timeout", str(config.DEFAULT_LOGIN_TIMEOUT)))
                 self._log("[SYSTEM] Eski ayarlar başarıyla yüklendi.", "system")
@@ -170,7 +177,6 @@ class WellcomeAutomationApp(ctk.CTk):
                 pass
 
     def _save_settings(self):
-        """Program kapanırken mevcut ayarları kaydeder."""
         settings = {
             "file_path": self.file_path.get(),
             "headless": self.headless_var.get(),
@@ -188,7 +194,7 @@ class WellcomeAutomationApp(ctk.CTk):
     def _on_closing(self):
         self.is_running = False
         self.pause_event.set()
-        self._save_settings() # Çıkarken ayarları kaydet
+        self._save_settings() 
         self.destroy()
         os._exit(0)
 
@@ -206,36 +212,34 @@ class WellcomeAutomationApp(ctk.CTk):
             self.log_text.configure(state="disabled")
         self.after(0, update_gui)
 
-    # --- VERİ TEMİZLEME (SANITIZATION) EKLENDİ ---
+    # --- YENİ EKLENEN PROXY OKUMA SİSTEMİ ---
     def _read_data_file(self, file_path: str) -> List[Dict[str, str]]:
         data: List[Dict[str, str]] = []
-        seen_users = set() # Çift (mükerrer) kayıtları engellemek için
+        seen_users = set() 
         
         try:
             if file_path.lower().endswith('.xlsx'):
                 df = pd.read_excel(file_path)
                 for index, row in df.iterrows():
-                    # Boş satırları atla
                     if pd.isna(row.iloc[0]) or pd.isna(row.iloc[1]) or pd.isna(row.iloc[2]):
                         continue
                     
                     company = str(row.iloc[0]).strip()
                     username = str(row.iloc[1]).strip()
                     password = str(row.iloc[2]).strip()
+                    # 4. Sütun varsa Proxy olarak al, yoksa None yap
+                    proxy = str(row.iloc[3]).strip() if len(row) > 3 and not pd.isna(row.iloc[3]) else None
                     
-                    # Eksik veya boş bilgi varsa atla
                     if not company or not username or not password or company == 'nan':
                         continue
                         
-                    # Aynı kullanıcı listeye 2 defa eklenmişse ikinciyi sil (Filtreleme)
                     if username in seen_users:
-                        self._log(f"[WARNING] Çift kayıt bulundu ve temizlendi: {username}", "warning")
                         continue
                         
                     seen_users.add(username)
-                    data.append({"company": company, "username": username, "password": password})
+                    data.append({"company": company, "username": username, "password": password, "proxy": proxy})
                     
-                self._log(f"[SYSTEM] Excel'den {len(data)} temiz kullanıcı verisi okundu.", "system")
+                self._log(f"[SYSTEM] Excel'den {len(data)} hesap okundu (Proxy destekli).", "system")
             else:
                 with open(file_path, "r", encoding="utf-8") as f:
                     for line_num, line in enumerate(f, 1):
@@ -243,16 +247,15 @@ class WellcomeAutomationApp(ctk.CTk):
                         if not line or line.startswith("#"): continue
                         
                         parts = line.split()
-                        if len(parts) < 3:
-                            continue
+                        if len(parts) < 3: continue
                             
                         username = parts[1].strip()
-                        if username in seen_users:
-                            continue
+                        if username in seen_users: continue
                             
+                        proxy = parts[3].strip() if len(parts) > 3 else None
                         seen_users.add(username)
-                        data.append({"company": parts[0].strip(), "username": username, "password": parts[2].strip()})
-                self._log(f"[SYSTEM] Text dosyasından {len(data)} temiz kullanıcı okundu.", "system")
+                        data.append({"company": parts[0].strip(), "username": username, "password": parts[2].strip(), "proxy": proxy})
+                self._log(f"[SYSTEM] Text dosyasından {len(data)} hesap okundu (Proxy destekli).", "system")
             return data
         except Exception as e:
             self._log(f"[ERROR] Failed to read file: {e}", "error")
@@ -272,6 +275,7 @@ class WellcomeAutomationApp(ctk.CTk):
             mail_server.login(self.gmail_address, self.gmail_password)
         except Exception as e:
             self._log(f"  → [ERROR] Gmail connection failed: {e}", "error")
+            self._play_sound("error")
             return None
 
         try:
@@ -336,27 +340,30 @@ class WellcomeAutomationApp(ctk.CTk):
             self.pause_button.configure(text="Pause", fg_color="#f39c12")
             self._log("[SYSTEM] Automation resumed", "system")
 
-    # --- PROFİL VE OTURUM YÖNETİMİ ---
-    def _create_driver(self, driver_path: str, username: str) -> webdriver.Chrome:
-        chrome_options = Options()
+    # --- YENİ MİMARİ: UNDETECTED CHROMEDRIVER & PROXY ---
+    def _create_driver(self, username: str, proxy: str = None) -> uc.Chrome:
+        chrome_options = uc.ChromeOptions()
         chrome_options.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": config.DISABLE_IMAGES})
         
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         
-        # Her kullanıcı için kalıcı bir çerez klasörü oluştur (Böylece 2. girişte şifre/OTP sormaz)
+        # PROXY ENTEGRASYONU
+        if proxy and proxy.lower() != "nan":
+            chrome_options.add_argument(f"--proxy-server=http://{proxy}")
+            self._log(f"  🌐 Proxy Devrede: {proxy}", "system")
+        
         base_dir = os.path.dirname(self.file_path.get()) if self.file_path.get() else os.getcwd()
         profile_dir = os.path.join(base_dir, "Chrome_Profiles", username)
         os.makedirs(profile_dir, exist_ok=True)
-        chrome_options.add_argument(f"user-data-dir={profile_dir}")
         
-        if self.headless_var.get():
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--window-size=1920,1080")
-            
-        service = Service(driver_path)
-        return webdriver.Chrome(service=service, options=chrome_options)
+        # uc.Chrome, webdriver_manager'a ihtiyaç duymadan kendini günceller ve gizler
+        return uc.Chrome(
+            options=chrome_options, 
+            user_data_dir=profile_dir,
+            headless=self.headless_var.get()
+        )
 
     def _safe_action(self, wait_obj: WebDriverWait, by_type: str, locator: str, action: str, text: str = "") -> bool:
         for attempt in range(3):
@@ -379,7 +386,7 @@ class WellcomeAutomationApp(ctk.CTk):
                     raise
         return False
 
-    def _process_user(self, user_data: Dict[str, str], driver: webdriver.Chrome, timeout: int, retries: int) -> Dict[str, str]:
+    def _process_user(self, user_data: Dict[str, str], driver: uc.Chrome, timeout: int, retries: int) -> Dict[str, str]:
         self.pause_event.wait()
         username = user_data['username']
         status = "Unknown Error"
@@ -387,16 +394,12 @@ class WellcomeAutomationApp(ctk.CTk):
 
         try:
             self._log(f"\n--- Processing User: {username} ---", "system")
-            # Çerezleri Silmiyoruz! Oturum kaydetme özelliği (Session Persistence) devrede.
             driver.get(config.LOGIN_URL)
             
-            # KONTROL: Sistem zaten bu hesaba girmiş mi? (Çerezler yaşıyor mu?)
             needs_login = True
             try:
-                # 5 saniye bekle, eğer firma kodu kutusu sayfada Varsa, giriş yapılmamış demektir.
                 WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, config.FORM_IDS["firm_code"])))
             except TimeoutException:
-                # Kutu sayfada Yoksa, site otomatik olarak hesaba giriş yapıp anasayfaya yönlendirmiştir.
                 needs_login = False
 
             if needs_login:
@@ -437,6 +440,7 @@ class WellcomeAutomationApp(ctk.CTk):
                     status = "Success"
                 else:
                     self._log(f"⚠️ FAILED: {username} - OTP not received", "warning")
+                    self._play_sound("error")
                     status = "Failed (No OTP)"
             else:
                 self._log(f"⚡ FAST LOGIN: {username} session active! Otomatik giriş yapıldı.", "success")
@@ -444,6 +448,7 @@ class WellcomeAutomationApp(ctk.CTk):
 
         except Exception as e:
             self._log(f"❌ ERROR: {username} - {str(e)[:70]}", "error")
+            self._play_sound("error")
             status = f"Error: {str(e)[:50]}"
             try:
                 base_dir = os.path.dirname(self.file_path.get())
@@ -462,7 +467,6 @@ class WellcomeAutomationApp(ctk.CTk):
                 except Exception:
                     pass
             
-            # --- YENİ: Başarılı/Başarısız Farketmez, İşlenen Hesabı Checkpoint'e Kaydet ---
             with self.checkpoint_lock:
                 try:
                     processed = []
@@ -476,7 +480,7 @@ class WellcomeAutomationApp(ctk.CTk):
                 except Exception:
                     pass
 
-        return {"Username": username, "Company": user_data['company'], "Status": status, "Timestamp": timestamp}
+        return {"Username": username, "Company": user_data['company'], "Proxy": user_data.get('proxy', 'Yok'), "Status": status, "Timestamp": timestamp}
 
     def _generate_report(self, results: List[Dict[str, str]]) -> None:
         try:
@@ -498,7 +502,6 @@ class WellcomeAutomationApp(ctk.CTk):
         if self.is_running:
             return
 
-        # --- YENİ: CHECKPOINT (Kaldığı Yerden Devam Etme) KONTROLÜ ---
         user_data_list = self._read_data_file(self.file_path.get())
         if not user_data_list:
             return
@@ -517,7 +520,6 @@ class WellcomeAutomationApp(ctk.CTk):
                 user_data_list = [u for u in user_data_list if u['username'] not in processed_users]
                 self._log(f"[SYSTEM] Checkpoint devrede: Kalan {len(user_data_list)} kullanıcı işleniyor...", "system")
             else:
-                # Sıfırdan başlatıyorsak checkpoint dosyasını temizle
                 with open(self.checkpoint_file, "w") as f:
                     json.dump([], f)
                 self._log("[SYSTEM] Eski checkpoint temizlendi, sıfırdan başlanıyor...", "system")
@@ -531,7 +533,6 @@ class WellcomeAutomationApp(ctk.CTk):
         self.pause_button.configure(state="normal")
         self.pause_event.set()
 
-        # Temizlenmiş ve Checkpointten süzülmüş listeyi Thread'e yolluyoruz
         threading.Thread(target=self._run_automation, args=(user_data_list,), daemon=True).start()
 
     def _run_automation(self, user_data_list: list) -> None:
@@ -562,8 +563,7 @@ class WellcomeAutomationApp(ctk.CTk):
             self.after(0, lambda: self.progress_bar.set(0))
             self.after(0, lambda: self.stats_label.configure(text=f"✅ Başarılı: 0  |  ❌ Hatalı: 0  |  ⏳ Kalan: {total_users}"))
 
-            self._log("[SYSTEM] Initializing ChromeDriver...", "system")
-            driver_path = ChromeDriverManager().install()
+            self._log("[SYSTEM] Initializing Undetected ChromeDriver...", "system")
 
             work_queue = queue.Queue()
             for user in user_data_list:
@@ -578,8 +578,9 @@ class WellcomeAutomationApp(ctk.CTk):
                     except queue.Empty:
                         break
                     
-                    # Sürücüyü oluştururken username parametresini de veriyoruz ki doğru klasörü (çerezi) okusun
-                    driver = self._create_driver(driver_path, user['username'])
+                    # --- UC ile Driver Başlatma ---
+                    driver = self._create_driver(username=user['username'], proxy=user.get('proxy'))
+                    
                     result = self._process_user(user, driver, timeout, retries)
                     
                     with results_lock:
@@ -607,12 +608,14 @@ class WellcomeAutomationApp(ctk.CTk):
 
             if results and self.is_running:
                 self._generate_report(results)
-                # Tüm liste eksiksiz bittiyse Checkpoint'i sıfırla ki bir sonraki Excel yüklemesinde sorun olmasın
+                # BİTİŞ SESİ VE CHECKPOINT SIFIRLAMA
+                self._play_sound("finish")
                 with open(self.checkpoint_file, "w") as f:
                     json.dump([], f)
 
         except Exception as e:
             self._log(f"[ERROR] Automation error: {e}", "error")
+            self._play_sound("error")
         finally:
             def reset_ui():
                 self.is_running = False
