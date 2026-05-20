@@ -188,7 +188,7 @@ class WellcomeAutomationApp(ctk.CTk):
                         "username": str(row.iloc[1]).strip(),
                         "password": str(row.iloc[2]).strip()
                     })
-                self._log(f"[SYSTEM] Excel dosyasından {len(data)} kullanıcı başarıyla okundu.", "system")
+                self._log(f"[SYSTEM] Excel File Readed From {len(data)} User Succesfully.", "system")
             else:
                 with open(file_path, "r", encoding="utf-8") as f:
                     for line_num, line in enumerate(f, 1):
