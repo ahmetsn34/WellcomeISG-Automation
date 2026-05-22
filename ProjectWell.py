@@ -150,7 +150,7 @@ class WellcomeRPAApp(ctk.CTk):
         self.settings_file = "settings.json"
         self.checkpoint_file = "checkpoint.json"
 
-        # Pencere Boyutu Sabitleme (Konsol Altta Sıkışmasın Diye Büyüttüm)
+        # Pencere Boyutu Sabitlendi
         self.geometry("640x720")
 
         # İç Durum Değişkenleri
@@ -264,15 +264,15 @@ class WellcomeRPAApp(ctk.CTk):
         self.start_button.pack(side="left", expand=True, padx=10)
 
         self.pause_button = ctk.CTkButton(button_frame, text="", fg_color="#f39c12", hover_color="#e67e22", command=self._toggle_pause, height=44, width=110, state="disabled", font=ctk.CTkFont(size=13, weight="bold"))
-        self.pause_button.pack(side="left", expand=True, padx=10)
+        self.pause_button.pack(side="left", expand=True, anchor="w", padx=10)
 
-        # --- KONSOL BURADA SABİTLENDİ VE YÜKSEKLİĞİ KİLİTLENDİ ---
+        # Çakılı Sabit Konsol Ekranı
         log_frame = ctk.CTkFrame(self)
         log_frame.pack(side="top", pady=10, padx=20, fill="both", expand=True)
 
         self.log_textInput = tk.Text(log_frame, bg="#111111", fg="#deff9a", font=("Consolas", 10), wrap="word", bd=0, highlightthickness=0)
         self.log_textInput.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-        self.log_text = self.log_textInput # Referans eşitlemesi
+        self.log_text = self.log_textInput 
 
         self.log_text.tag_config("normal", foreground="#ffffff")
         self.log_text.tag_config("system", foreground="#5dade2")
@@ -378,9 +378,23 @@ class WellcomeRPAApp(ctk.CTk):
                     tc_match = re.search(r'\b\d{11}\b', full_text)
                     if tc_match:
                         veriler["tc"] = tc_match.group(0)
-                        self._log(f"🤖 [AI-OCR] {klasor_adi} için PDF içinden T.C. başarıyla çekildi: {veriler['tc']}", "success")
+                        self._log(f"🤖 [AI-OCR] PDF içinden T.C. çekildi: {veriler['tc']}", "success")
                     else:
-                        self._log(f"⚠️ {klasor_adi} belgesinde 11 haneli T.C. numarası ayıklanamadı!", "warning")
+                        self._log(f"⚠️ {klasor_adi} belgesinde T.C. numarası bulunamadı!", "warning")
+
+                    phone_match = re.search(r'(?:\+?90|\b0)?\s*([5]\d{2})\s*(\d{3})\s*(\d{2})\s*(\d{2})\b', full_text)
+                    if phone_match:
+                        raw_phone = "".join(phone_match.groups())
+                        veriler["telefon"] = self._clean_phone_number(raw_phone)
+                        self._log(f"🤖 [AI-OCR] PDF içinden Telefon başarıyla çekildi: {veriler['telefon']}", "success")
+                    else:
+                        alt_phone = re.search(r'\b(?:0|\+?90)?(5\d{9})\b', full_text)
+                        if alt_phone:
+                            veriler["telefon"] = self._clean_phone_number(alt_phone.group(1))
+                            self._log(f"🤖 [AI-OCR] PDF içinden Telefon çekildi: {veriler['telefon']}", "success")
+                        else:
+                            self._log(f"⚠️ {klasor_adi} belgesinde Telefon numarası bulunamadı!", "warning")
+                            
                 except Exception as pdf_err:
                     self._log(f"⚠️ Evrak okuma motoru hatası: {str(pdf_err)[:40]}", "warning")
                     
@@ -407,7 +421,6 @@ class WellcomeRPAApp(ctk.CTk):
             self._log("🔐 Giriş alanları dolduruluyor...", "system")
             time.sleep(1.5) 
 
-            # 1. Şirket Kodu Girişi (ID: FirmCode)
             if self.company_code_var.get():
                 comp_input = bekleme.until(EC.presence_of_element_located((By.ID, "FirmCode")))
                 comp_input.clear()
@@ -421,7 +434,6 @@ class WellcomeRPAApp(ctk.CTk):
                 
                 bekleme = WebDriverWait(driver, 20)
 
-            # 2. Kullanıcı Adı ve Şifre Alanları (Hafıza Enjeksiyonlu)
             self._log("👁️ Alanlar taranıyor, Username kutusu bekleniyor...", "system")
             user_box = bekleme.until(EC.element_to_be_clickable((By.ID, "Username")))
             pass_box = driver.find_element(By.ID, "Password")
@@ -430,14 +442,12 @@ class WellcomeRPAApp(ctk.CTk):
             driver.execute_script("arguments[0].value = arguments[1];", pass_box, self.password_var.get())
             time.sleep(0.5)
 
-            # 3. Giriş Butonuna Tıklama (ID: loginButton)
             login_btn = bekleme.until(EC.element_to_be_clickable((By.ID, "loginButton")))
             driver.execute_script("arguments[0].click();", login_btn) 
             
             self._log(lg["login_wait"], "warning")
             time.sleep(3.5) 
             
-            # --- SMS DOĞRULAMA BUTONLU BÖLÜM ---
             otp_done_event = threading.Event()
             otp_code_container = [""]
 
@@ -463,7 +473,10 @@ class WellcomeRPAApp(ctk.CTk):
                 time.sleep(3.0)
             return True
         except Exception as e:
+            # --- ZIRH KORUMASI: HATA BURADA YAKALANIYOR ---
             self._log(f"❌ KRİTİK GİRİŞ HATASI: Giriş elemanları doldurulamadı! Detay: {str(e)[:50]}", "error")
+            try: winsound.MessageBeep(winsound.MB_ICONHAND)
+            except: pass
             return False
 
     def _process_single_folder(self, driver: Optional[uc.Chrome], folder_name: str, base_path: str) -> str:
@@ -673,12 +686,18 @@ class WellcomeRPAApp(ctk.CTk):
                 bekleme = WebDriverWait(driver, 15)
                 
                 if self.username_var.get() and self.password_var.get():
-                    self._handle_embedded_login(driver, bekleme)
+                    # --- 🛑 YENİ MİMARİ BURADA KİLİTLİYOR 🛑 ---
+                    login_success = self._handle_embedded_login(driver, bekleme)
+                    if not login_success:
+                        self._log("⚠️ [KRİTİK DURDURMA] Giriş başarısız olduğu için işlem tamamen iptal edildi. Klasörler ellenmedi.", "error")
+                        if driver: driver.quit()
+                        return # Klasör döngüsüne girmeden sistemi tamamen durdurur!
                 else:
                     messagebox.showinfo("Giriş Onayı", "Giriş bilgileri boş! Lütfen tarayıcıdan giriş yapıp OK basın.")
             else:
                 self._log(lg["demo_alert"], "warning")
 
+            # Giriş başarılıysa döngü güvenle başlar
             for index, folder in enumerate(folders):
                 if not self.is_running: break
                 status_res = self._process_single_folder(driver, folder, base_path)
