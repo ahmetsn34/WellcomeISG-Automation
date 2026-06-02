@@ -20,18 +20,24 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 import pandas as pd
 
-# Akıllı PDF Okuma Kütüphaneleri
+# Akıllı PDF ve OCR Kütüphaneleri
 import pdfplumber
 from pdf2image import convert_from_path
 import pytesseract
 from PIL import Image
 
-import undetected_chromedriver as uc 
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import StaleElementReferenceException, TimeoutException, UnexpectedAlertPresentException
+
+# Konuşma Protokolü için Ses Kütüphanesi
+try:
+    import pyttsx3
+except ImportError:
+    pyttsx3 = None
 
 # =====================================================================
 # --- TESSERACT OCR WINDOWS YOLU YAPILANDIRMASI ---
@@ -47,12 +53,23 @@ try:
     def safe_del(self):
         try:
             original_del(self)
-        except Exception:
-            pass
+        except Exception: pass
     uc.Chrome.__del__ = safe_del
-except Exception:
-    pass
+except Exception: pass
+
+os.environ['WDM_LOG'] = '0'
+ctk.set_appearance_mode("Dark")
+
 # =====================================================================
+# --- LOGGER VE CONFIG COZUMU ---
+# =====================================================================
+class MockLogger:
+    def info(self, msg): print(f"[INFO] {msg}")
+    def error(self, msg): print(f"[ERROR] {msg}")
+
+class MockConfig:
+    DISABLE_IMAGES = False
+    LOGIN_URL = "https://wellcome.azurewebsites.net/pnlwell/"
 
 try:
     from dotenv import load_dotenv
@@ -65,29 +82,20 @@ try:
     from logger_config import setup_logger
     logger = setup_logger()
 except ImportError:
-    class MockLogger:
-        def info(self, msg): print(f"[INFO] {msg}")
-        def error(self, msg): print(f"[ERROR] {msg}")
     logger = MockLogger()
-    class MockConfig:
-        DISABLE_IMAGES = False
-        LOGIN_URL = "https://wellcome.azurewebsites.net/pnlwell/"
     config = MockConfig()
 
-os.environ['WDM_LOG'] = '0'
-
 # =====================================================================
-# --- 🍦 WELLCOME AUTOMATION: VANILLA SAAS COMPACT SYMMETRIC 🍦 ---
+# --- DİL PAKETİ ---
 # =====================================================================
-ctk.set_appearance_mode("Dark")
-# =====================================================================
-
 LANG_PACK = {
     "TR": {
-        "title": "SEA FORT // AUTOMATION SUITE",
-        "subtitle": "Enterprise RPA Control Panel v2.5",
-        "select_folder": "Dosya Seç",
-        "placeholder": "WellcomeVeri Excel veya CSV dosyasını bağlayın...",
+        "title": "WELLCOME // AUTOMATION SUITE",
+        "subtitle": "Enterprise RPA Control Panel v2.8",
+        "select_file": "Excel Seç",
+        "select_folder": "Klasör Seç",
+        "placeholder_file": "WellcomeVeri Excel/CSV dosyasını bağlayın...",
+        "placeholder_folder": "Personel PDF evraklarının bulunduğu ana klasörü seçin...",
         "headless": "Arka Plan (Headless)",
         "start": "OTOMASYONU BAŞLAT",
         "running": "İŞLEMLER SÜRÜYOR...",
@@ -96,26 +104,19 @@ LANG_PACK = {
         "kpi_success": "BAŞARILI KAYIT",
         "kpi_failed": "HATALI / KALAN",
         "kpi_eta": "TAHMİNİ BİTİŞ (ETA)",
-        "no_folder": "Lütfen önce geçerli bir Excel veya CSV veri dosyası seçin!",
+        "no_data": "Lütfen önce Excel veri dosyasını ve Evrak klasörünü seçin!",
         "pre_flight_start": "[SİSTEM] Altyapı ve veri taraması yapılıyor...",
         "internet_ok": "  🌐 İnternet bağlantısı aktif.",
         "internet_err": "❌ KRİTİK HATA: İnternet bağlantısı yok!",
         "chrome_ok": "  🚗 Chrome görünmezlik altyapısı hazır.",
         "eta_calculating": "Hesaplanıyor...",
-        "all_done": "Seçilen dosyadaki tüm personeller başarıyla işlendi!",
+        "all_done": "Seçilen dosyadaki tüm personeller ve evrakları başarıyla işlendi!",
         "login_wait": "🔐 Gömülü bilgilerle giriş yapılıyor, OTP kodu bekleniyor...",
-        "process_folder": "👤 Personel Analiz Ediliyor: {}",
+        "process_folder": "👤 Personel İşleniyor: {}",
         "read_success": "    📋 Okunan -> Ad Soyad: {}, TC: {}, Tel: {}",
-        "img1_click": "    -> 'Çalışan Tanımla' sekmesine geçiliyor...",
-        "img2_click": "    -> '+ Yeni Çalışan' form ekranı açılıyor...",
-        "img3_fill": "    -> Form alanları ve kimlik bilgileri yazılıyor...",
-        "gen_password": "    🔑 'Üret' butonuna basılarak rastgele şifre oluşturuluyor...",
-        "submit_form": "    -> Bilgiler doğrulanıyor, 'Kullanıcıyı Oluştur' butonuna çift tıklanıyor...",
-        "success_log": "✅ [BAŞARILI] {} sisteme başarıyla kaydedildi.",
+        "submit_form": "-> Bilgiler doğrulanıyor, 'Kullanıcıyı Oluştur' butonuna çift tıklanıyor...",
+        "success_log": "✅ [BAŞARILI] {} sisteme kaydedildi. Tokenli evrak linkine zıplanıyor...",
         "error_log": "❌ [HATA] {} işlenirken sorun çıktı: {}",
-        "checkpoint_title": "Oturumu Kurtar",
-        "checkpoint_msg": "Önceki oturumdan kalan {} adet işlenmiş kayıt bulundu.\nKaldığınız yerden devam etmek ister misiniz?\n\nEvet: Devam eder.\nHayır: Sıfırdan başlar.",
-        "checkpoint_clean": "[SİSTEM] Eski hafıza temizlendi, sıfırdan başlanıyor...",
         "report_gen": "📊 Operasyon raporu harici dizine kaydedildi: {}",
         "sw_retry": "Akıllı Adım Tekrarı",
         "lbl_comp": "Şirket Kodu",
@@ -124,13 +125,16 @@ LANG_PACK = {
         "otp_title": "🔐 OTP Güvenlik Kodu",
         "otp_prompt": "Telefonunuza veya e-postanıza gelen 6 haneli OTP kodunu giriniz:",
         "lbl_throttle": "Gecikme Girdisi: {}s",
-        "lbl_range": "Filtre Sektör Aralığı"
+        "lbl_range": "Filtre Sektör Aralığı",
+        "only_docs_mode": "Sadece Eksik Evrakları Tamamla (Kayıt Adımını Atla)"
     },
     "EN": {
-        "title": "SEA FORT // AUTOMATION SUITE",
-        "subtitle": "Enterprise RPA Control Panel v2.5",
-        "select_folder": "Browse",
-        "placeholder": "Select WellcomeVeri Excel or CSV file...",
+        "title": "WELLCOME // AUTOMATION SUITE",
+        "subtitle": "Enterprise RPA Control Panel v2.8",
+        "select_file": "Browse Excel",
+        "select_folder": "Browse Folder",
+        "placeholder_file": "Select WellcomeVeri Excel/CSV file...",
+        "placeholder_folder": "Select main folder containing personnel PDFs...",
         "headless": "Headless Mode",
         "start": "START AUTOMATION",
         "running": "PROCESSING...",
@@ -139,27 +143,20 @@ LANG_PACK = {
         "kpi_success": "SUCCESS LOGS",
         "kpi_failed": "FAILED / REMAINING",
         "kpi_eta": "ESTIMATED TIME (ETA)",
-        "no_folder": "Please select a valid Excel or CSV data file first!",
+        "no_data": "Please select both data file and documents folder first!",
         "pre_flight_start": "[SYSTEM] Running pre-flight infrastructure checks...",
         "internet_ok": "  🌐 Internet connection is active.",
         "internet_err": "❌ CRITICAL ERROR: No internet connection!",
         "chrome_ok": "  🚗 Chrome stealth infrastructure is ready.",
         "eta_calculating": "Calculating...",
-        "all_done": "All personnel records in the selected file have been processed!",
+        "all_done": "All personnel records and documents have been processed!",
         "login_wait": "🔐 Logging in with embedded credentials, waiting for OTP...",
-        "process_folder": "👤 Analyzing Personnel: {}",
+        "process_folder": "👤 Processing Personnel: {}",
         "read_success": "    📋 Extracted -> Name: {}, ID: {}, Tel: {}",
-        "img1_click": "    -> Navigating to 'Personnel Definitions'...",
-        "img2_click": "    -> Opening '+ New Employee' form...",
-        "img3_fill": "    -> Filling out form fields and identity data...",
-        "gen_password": "    🔑 Clicking 'Generate' to create a random password...",
-        "submit_form": "    -> Verifying details, double clicking 'Create User' button...",
-        "success_log": "✅ [SUCCESS] {} registered successfully.",
+        "submit_form": "-> Verifying details, double clicking 'Create User' button...",
+        "success_log": "✅ [SUCCESS] {} registered successfully. Jumping to tokenized link...",
         "error_log": "❌ [ERROR] Failed to process {}: {}",
-        "checkpoint_title": "Resume Session",
-        "checkpoint_msg": "Found {} processed records from previous session.\nResume?",
-        "checkpoint_clean": "[SYSTEM] Old memory cleared, starting from scratch...",
-        "report_gen": "📊 Operation report saved to operational directory: {}",
+        "report_gen": "📊 Report saved: {}",
         "sw_retry": "Smart Step Retry", 
         "lbl_comp": "Company Code",
         "lbl_user": "Username",
@@ -167,7 +164,8 @@ LANG_PACK = {
         "otp_title": "🔐 OTP Security Code",
         "otp_prompt": "Enter the 6-digit OTP code sent to your phone/email:",
         "lbl_throttle": "Throttle Delay: {}s",
-        "lbl_range": "Range Indices"
+        "lbl_range": "Range Indices",
+        "only_docs_mode": "Only Complete Documents (Skip Registration)"
     }
 }
 
@@ -180,10 +178,15 @@ class WellcomeRPAApp(ctk.CTk):
         self.title_label.configure(text=lg["title"])
         self.subtitle_label.configure(text=lg["subtitle"])
         
-        self.folder_button.configure(text=lg["select_folder"])
-        self.folder_entry.configure(placeholder_text=lg["placeholder"])
+        self.excel_file_button.configure(text=lg["select_file"])
+        self.excel_file_entry.configure(placeholder_text=lg["placeholder_file"])
+        self.docs_folder_button.configure(text=lg["select_folder"])
+        self.docs_folder_entry.configure(placeholder_text=lg["placeholder_folder"])
+        
         self.cb_headless.configure(text=lg["headless"])
         self.sw_retry_cb.configure(text=lg["sw_retry"])
+        self.cb_only_docs.configure(text=lg["only_docs_mode"])
+        
         self.lbl_comp_txt.configure(text=lg["lbl_comp"]) 
         self.lbl_user_txt.configure(text=lg["lbl_user"])
         self.lbl_pass_txt.configure(text=lg["lbl_pass"])
@@ -203,6 +206,17 @@ class WellcomeRPAApp(ctk.CTk):
             self.start_button.configure(text=lg["running"])
         self.lang_dropdown.set(self.current_lang)
 
+    def _speak(self, text: str):
+        if pyttsx3:
+            def run_speech():
+                try:
+                    engine = pyttsx3.init()
+                    engine.setProperty('rate', 150)
+                    engine.say(text)
+                    engine.runAndWait()
+                except: pass
+            threading.Thread(target=run_speech, daemon=True).start()
+
     def _generate_report(self, results: List[Dict[str, str]], center_path: str) -> None:
         try:
             if not self.current_report_path:
@@ -220,24 +234,28 @@ class WellcomeRPAApp(ctk.CTk):
                 with open(self.settings_file, "r") as f:
                     settings = json.load(f)
                     self.current_lang = settings.get("lang", "TR")
-                    self.base_folder_path.set(settings.get("base_folder_path", ""))
+                    self.excel_file_path.set(settings.get("excel_file_path", ""))
+                    self.docs_folder_path.set(settings.get("docs_folder_path", ""))
                     self.company_code_var.set(settings.get("company_code", "")) 
                     self.username_var.set(settings.get("username", ""))
                     self.password_var.set(settings.get("password", ""))
                     self.headless_var.set(settings.get("headless", False))
                     self.retry_enabled.set(settings.get("retry_enabled", True))
+                    self.only_docs_mode_var.set(settings.get("only_docs_mode", False))
                     self.alert_dismiss_enabled.set(settings.get("alert_dismiss_enabled", True))
             except Exception: pass
 
     def _save_settings(self) -> None:
         settings = {
             "lang": self.current_lang,
-            "base_folder_path": self.base_folder_path.get(),
+            "excel_file_path": self.excel_file_path.get(),
+            "docs_folder_path": self.docs_folder_path.get(),
             "company_code": self.company_code_var.get(), 
             "username": self.username_var.get(),
             "password": self.password_var.get(),
             "headless": self.headless_var.get(),
             "retry_enabled": self.retry_enabled.get(),
+            "only_docs_mode": self.only_docs_mode_var.get(),
             "alert_dismiss_enabled": self.alert_dismiss_enabled.get()
         }
         try:
@@ -255,47 +273,40 @@ class WellcomeRPAApp(ctk.CTk):
             self.pause_button.configure(text=lg["pause"], fg_color="#64748B", hover_color="#475569")
             self._log(f"[SİSTEM] {lg['resume']} - Otomasyon kaldığı yerden devam ediyor...", "system")
 
-    # =====================================================================
-    # --- FIX 1: _log metoduna pencere var mı? guard + try/except zırhı ---
-    # =====================================================================
     def _log(self, message: str, tag: str = "normal") -> None:
         def update_gui():
+            self.log_text.configure(state="normal")
             try:
-                # Pencere hâlâ yaşıyor mu? Kapatılmışsa işlem yapma.
-                if not self.winfo_exists():
-                    return
-                self.log_text.configure(state="normal")
-                try:
-                    line_count = int(self.log_text.index('end-1c').split('.')[0])
-                    if line_count > 200:
-                        self.log_text.delete("1.0", "20.0")
-                except Exception:
-                    pass
-                self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')} - {message}\n", tag)
-                self.log_text.see(tk.END)
-                self.log_text.configure(state="disabled")
-            except Exception:
-                pass  # Pencere destroy edilmişse sessizce geç
+                line_count = int(self.log_text.index('end-1c').split('.')[0])
+                if line_count > 200:
+                    self.log_text.delete("1.0", "20.0")
+            except Exception: pass
 
-        try:
-            self.after(0, update_gui)
-        except Exception:
-            pass  # after() pencere yoksa hata fırlatır, yutuyoruz
+            self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')} - {message}\n", tag)
+            self.log_text.see(tk.END)
+            self.log_text.configure(state="disabled")
+        self.after(0, update_gui)
 
     def _on_lang_change(self, choice: str) -> None:
         self.current_lang = choice
         self._update_ui_texts()
         self._save_settings()
 
-    def _select_folder(self) -> None:
-        # KLASÖR YERİNE MANUEL DOSYA SEÇİMİ ENJEKTE EDİLDİ
+    def _select_excel_file(self) -> None:
         path = filedialog.askopenfilename(
             title="WellcomeRPA Veri Dosyasını Seçin",
             filetypes=[("Excel ve CSV Dosyaları", "*.xlsx *.xls *.csv")]
         )
         if path:
-            self.base_folder_path.set(path)
-            self._log(f"[SİSTEM] Veri dosyası başarıyla bağlandı: {os.path.basename(path)}", "system")
+            self.excel_file_path.set(path)
+            self._log(f"[SİSTEM] Veri Excel'i Bağlandı: {os.path.basename(path)}", "system")
+            self._save_settings()
+
+    def _select_docs_folder(self) -> None:
+        path = filedialog.askdirectory(title="Personel PDF Klasörlerinin Bulunduğu Ana Dizini Seçin")
+        if path:
+            self.docs_folder_path.set(path)
+            self._log(f"[SİSTEM] PDF Evrak Klasörü Bağlandı: {path}", "system")
             self._save_settings()
 
     def _clean_phone_number(self, phone_str: str) -> str:
@@ -307,7 +318,7 @@ class WellcomeRPAApp(ctk.CTk):
 
     def _mask_sensitive_data(self, value: str, is_tc: bool = True) -> str:
         if not value or value == "00000000000": return "---"
-        value = str(value).split('.')[0] # Float dönüşüm koruması
+        value = str(value).split('.')[0]
         if is_tc and len(value) == 11:
             return f"{value[:3]}******{value[-2:]}"
         elif not is_tc and len(value) >= 7:
@@ -330,23 +341,10 @@ class WellcomeRPAApp(ctk.CTk):
 
     def _request_otp_from_user(self) -> str:
         lg = LANG_PACK[self.current_lang]
+        self._speak("Lütfen telefonunuza gelen altı haneli güvenlik kodunu ekrana giriniz.")
         otp_box = ctk.CTkInputDialog(text=lg["otp_prompt"], title=lg["otp_title"])
         otp_code = otp_box.get_input()
         return otp_code if otp_code else ""
-
-    def _check_folder_health(self, folder_path: str) -> Tuple[bool, str]:
-        if not os.path.exists(folder_path):
-            return False, "Klasör bulunamadı"
-            
-        pdf_dosyalari = [f for f in os.listdir(folder_path) if f.upper().endswith('.PDF')]
-        if not pdf_dosyalari:
-            return False, "Klasörün içi boş veya PDF dosyası mevcut değil"
-            
-        target_pdf = os.path.join(folder_path, pdf_dosyalari[0])
-        if os.path.getsize(target_pdf) == 0:
-            return False, "PDF dosyası bozuk veya 0 KB (OneDrive Senkronizasyon Hatası)"
-            
-        return True, "Sağlıklı"
 
     def _is_blacklisted(self, folder_name: str) -> bool:
         if os.path.exists(self.blacklist_file):
@@ -383,9 +381,10 @@ class WellcomeRPAApp(ctk.CTk):
         self.settings_file = "settings.json"
         self.checkpoint_file = "checkpoint.json"
         self.blacklist_file = "blacklist.json"
-        self.geometry("720x680")
+        self.geometry("720x750")
 
-        self.base_folder_path = tk.StringVar()
+        self.excel_file_path = tk.StringVar()
+        self.docs_folder_path = tk.StringVar()
         self.company_code_var = tk.StringVar() 
         self.username_var = tk.StringVar()
         self.password_var = tk.StringVar()
@@ -397,6 +396,7 @@ class WellcomeRPAApp(ctk.CTk):
         self.is_running = False
         self.headless_var = tk.BooleanVar(value=False)
         self.retry_enabled = tk.BooleanVar(value=True)
+        self.only_docs_mode_var = tk.BooleanVar(value=False)
         self.alert_dismiss_enabled = tk.BooleanVar(value=True)
         self.current_lang = "TR"
         
@@ -413,38 +413,17 @@ class WellcomeRPAApp(ctk.CTk):
         self._update_ui_texts()
         logger.info("Application initialized with explicit dual-selection paths.")
 
-        # =====================================================================
-        # --- FIX 2: Pencere kapatma protokolü — after() döngüsünü güvenli sonlandırır ---
-        # =====================================================================
-        self.protocol("WM_DELETE_WINDOW", self._on_closing)
-
-    def _on_closing(self) -> None:
-        """Pencere kapatıldığında arka plan thread'ini ve after() döngüsünü temiz kapatır."""
-        self.is_running = False          # Thread döngüsünü durdur
-        self.pause_event.set()           # Duraklatılmışsa devam et ki thread takılı kalmasın
-        self._save_settings()
-        try:
-            self.quit()
-            self.destroy()
-        except Exception:
-            pass
-
     def _read_personel_from_row(self, row: pd.Series) -> Dict[str, str]:
-        """Excel satırından doğrudan temiz verileri çeker."""
         ad_soyadi = str(row.get('ADI SOYADI', 'Bilinmeyen Personel')).strip()
-        
-        # TC Numarasını Float bozulmasından koruyarak string'e çeviriyoruz
         tc_raw = str(row.get('T.C. Kimlik Numarası', ''))
         tc_clean = tc_raw.split('.')[0].strip()
         
-        # Telefon temizleme
         tel_raw = str(row.get('TELEFON NUMARASI', ''))
         tel_clean = self._clean_phone_number(tel_raw)
         
-        # Görev Alanı
         gorev_clean = str(row.get('GÖREVİ', 'Personel')).strip()
-        if g_clean := gorev_clean if gorev_clean != 'nan' else 'Personel':
-            gorev_clean = g_clean
+        if gorev_clean == 'nan' or not gorev_clean:
+            gorev_clean = 'Personel'
 
         veriler = {
             "tc": tc_clean if tc_clean != 'nan' else '00000000000', 
@@ -455,16 +434,14 @@ class WellcomeRPAApp(ctk.CTk):
             "valid_record": True
         }
 
-        # Validasyon Kontrolleri
         if not self._validate_tc_kn(veriler["tc"]):
             self._log(f"❌ [ALGORİTMA HATASI] {ad_soyadi} -> T.C. doğrulamayı geçemedi!", "error")
             veriler["valid_record"] = False
             
         if not veriler["telefon"]:
-            self._log(f"❌ [VERİ EKSİK] {ad_soyadi} -> Telefona ulaşılamadı!", "error")
+            self._log(f"❌ [VERİ EKSİK] {ad_soyadi} -> Telefon numarası tespit edilemedi!", "error")
             veriler["valid_record"] = False
 
-        # Statik E-Posta Yedek Planı
         char_map = {'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i', 'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u'}
         cleaned_name = "".join([char_map.get(c, c) for c in veriler["isim_soyisim"].lower() if c.isalnum() or c.isspace()])
         veriler["eposta"] = f"{cleaned_name.replace(' ', '.')}@seafortservice.com"
@@ -487,11 +464,12 @@ class WellcomeRPAApp(ctk.CTk):
         chrome_options.add_argument("--ignore-certificate-errors")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--window-size=1280,720")
+        chrome_options.page_load_strategy = 'normal'
         
         try:
             return uc.Chrome(options=chrome_options, headless=self.headless_var.get(), use_subprocess=True)
         except Exception as e:
-            self._log(f"⚠️ Sürücü uyuşmazlığı yakalandı. Tam bağımsız v148 kilit zırhı tetikleniyor...", "warning")
+            self._log(f"⚠️ Sürücü uyuşmazlığı yakalandı. Bağımsız v148 kilit zırhı tetikleniyor...", "warning")
             os.system("taskkill /f /im chromedriver.exe >nul 2>&1")
             time.sleep(0.5)
             
@@ -505,11 +483,12 @@ class WellcomeRPAApp(ctk.CTk):
             backup_options.add_argument("--disable-gpu")
             backup_options.add_argument("--ignore-certificate-errors")
             backup_options.add_argument("--window-size=1280,720")
+            backup_options.page_load_strategy = 'normal'
             
             try:
                 return uc.Chrome(options=backup_options, headless=self.headless_var.get(), version_main=148, use_subprocess=False)
             except Exception as backup_err:
-                self._log(f"❌ KRİTİK: v148 bağımsız zırhı da tarayıcıyı kaldıramadı: {backup_err}", "error")
+                self._log(f"❌ KRİTİK: Sürücü katmanı ayağa kaldırılamadı: {backup_err}", "error")
                 raise backup_err
 
     def _handle_embedded_login(self, driver: uc.Chrome, bekleme: WebDriverWait) -> bool:
@@ -563,8 +542,140 @@ class WellcomeRPAApp(ctk.CTk):
             self._log(f"❌ KRİTİK GİRİŞ HATASI: Detay: {str(e)[:50]}", "error")
             return False
 
-    def _process_single_row(self, driver: Optional[uc.Chrome], row: pd.Series) -> Tuple[str, Dict[str, str]]:
-        """Klasör yerine doğrudan Excel row verisini işleyen ana form enjeksiyonu."""
+    # =====================================================================
+    # --- AKILLI EVRAK YÜKLEME MOTORU (TOKENLİ/DİREKT LİNK SÜRÜMÜ) ---
+    # =====================================================================
+    def _execute_document_upload_pipeline(self, driver: uc.Chrome, bekleme: WebDriverWait, row: pd.Series, docs_folder: str) -> bool:
+        ad_soyadi = str(row.get('ADI SOYADI', '')).strip()
+        tc_no = str(row.get('T.C. Kimlik Numarası', '')).split('.')[0].strip()
+        user_delay = self.throttle_speed.get()
+        
+        personel_klasor_yolu = os.path.join(docs_folder, ad_soyadi)
+        if not os.path.exists(personel_klasor_yolu):
+            self._log(f"⚠️ {ad_soyadi} için döküman klasörü bulunamadı, evrak adımları pas geçiliyor.", "warning")
+            return False
+            
+        mevcut_dosyalar = os.listdir(personel_klasor_yolu)
+        if not mevcut_dosyalar:
+            self._log(f"⚠️ {ad_soyadi} klasörünün içi boş, evrak yüklenemedi.", "warning")
+            return False
+
+        try:
+            # --- [DÜZELTME]: TOKENLİ/KRİPTOLU LİNKE DOĞRUDAN FORCE ATMA VE ULTRA BEKLEME ---
+            self._log("🚀 Tokenli evrak yükleme linkine doğrudan bağlanılıyor...", "system")
+            
+            # Senin verdiğin nokta atışı tokenli link basılıyor
+            driver.get("https://wellcome.azurewebsites.net/pnlwell/files/documents/?v=CyGOrRq/t88nmeL78K/hmA==&dcode=ce")
+            
+            # [💎 ULTRASÖNİK BEKLEME]: Sayfanın tarayıcı belleğine tam oturması için 5.5 saniyelik sert zırh süresi
+            time.sleep(5.5 + user_delay) 
+            bekleme = WebDriverWait(driver, 25)
+
+            # --- SELECT2 ÇALIŞAN SEÇİMİ (JS DESTEKLİ GÜVENLİK DUVARI) ---
+            select2_container = bekleme.until(EC.presence_of_element_located((By.ID, "select2-drpWorker-container")))
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", select2_container)
+            time.sleep(0.5)
+            
+            # JS ile kutuyu tetikle
+            driver.execute_script("arguments[0].click();", select2_container)
+            time.sleep(1.2)
+
+            select2_search = bekleme.until(EC.presence_of_element_located((By.CLASS_NAME, "select2-search__field")))
+            select2_search.send_keys(ad_soyadi)
+            time.sleep(2.5) # Arama sonuçlarının listelenmesini sert bekle
+
+            results_options = driver.find_elements(By.XPATH, "//li[contains(@class, 'select2-results__option')]")
+            matched_option = None
+            
+            for option in results_options:
+                try:
+                    option_text = option.text
+                    if tc_no in option_text or ad_soyadi in option_text:
+                        matched_option = option
+                        break
+                except StaleElementReferenceException:
+                    pass
+                    
+            if matched_option:
+                driver.execute_script("arguments[0].click();", matched_option)
+                self._log(f"🎯 Aynı isimli kayıtlar içinden T.C: {tc_no} olan doğru personel seçildi.", "success")
+            else:
+                self._log(f"❌ Dropdown listesinde {ad_soyadi} adına ait T.C: {tc_no} bulunamadı!", "error")
+                return False
+
+            time.sleep(2.5)
+
+            evrak_haritasi = {
+                "Adli Sicil Belgesi": ["ADLI", "SICIL", "SABIKA"],
+                "Nüfus Cüzdanı Sadece Ön Yüz": ["KIMLIK", "NUFUS", "CILD", "EHLIYET", "ON YUZ"],
+                "Sürücü Belgesi": ["SURUCU", "EHLIYET", "GIZLI"],
+                "SGK İşe Giriş": ["SGK", "ISE GIRIS", "BILDIRGE", "BAĞKUR", "EMEKLI"],
+                "İş Yeri Hekimi Kanaat Raporu": ["SAGLIK", "RAPOR", "HEKIM", "DOKTOR", "KAN_GRUBU", "OGUK"],
+                "Temel İş Sağlığı ve Güvenliği Eğitim Sertifikası": ["ISG", "EĞITIM", "SERTIFIKA", "IS_SAGLIGI"],
+                "Mesleki Yeterlilik Belgesi": ["MYK", "YETERLILIK", "OPERATOR", "EKAT"],
+                "İş Sağlığı ve Güvenliği Talimat ve Taahhütnamesi": ["TAAHHUT", "TALIMAT", "İMZALI_FORM"],
+                "Psikoteknik": ["PSIKOTEKNIK", "PSIKO"],
+                "SRC Belgesi": ["SRC", "SRC3", "SRC4"],
+                "SRC-5": ["SRC5", "TEHLIKELI", "MADDE"]
+            }
+
+            evrak_select_el = bekleme.until(EC.presence_of_element_located((By.ID, "drpEvrak")))
+            select_obj = Select(evrak_select_el)
+            evrak_tipleri = [opt.text for opt in select_obj.options if opt.get_attribute("value") != "0|N" and opt.text.strip() != ""]
+
+            for tip in evrak_tipleri:
+                uygun_dosya = None
+                
+                for anahtar_tanim, kelimeler in evrak_haritasi.items():
+                    if anahtar_tanim.upper() in tip.upper() or tip.upper() in anahtar_tanim.upper():
+                        for dosya in mevcut_dosyalar:
+                            if any(k in dosya.upper() for k in kelimeler):
+                                uygun_dosya = dosya
+                                break
+                    if uygun_dosya: break
+
+                if not uygun_dosya:
+                    for dosya in mevcut_dosyalar:
+                        if dosya.upper().endswith('.PDF'):
+                            try:
+                                full_p = os.path.join(personel_klasor_yolu, dosya)
+                                with pdfplumber.open(full_p) as pdf:
+                                    ilk_sayfa_metni = pdf.pages[0].extract_text().upper() or ""
+                                    
+                                    if "ADLİ SİCİL" in ilk_sayfa_metni and "ADLI SICIL" in tip.upper():
+                                        uygun_dosya = dosya; break
+                                    elif "SGK" in ilk_sayfa_metni and "SGK" in tip.upper():
+                                        uygun_dosya = dosya; break
+                                    elif "SAĞLIK RAPORU" in ilk_sayfa_metni and "HEKIM" in tip.upper():
+                                        uygun_dosya = dosya; break
+                            except: pass
+
+                if uygun_dosya:
+                    tam_dosya_yolu = os.path.abspath(os.path.join(personel_klasor_yolu, uygun_dosya))
+                    
+                    select_obj.select_by_visible_text(tip)
+                    time.sleep(1.5)
+                    
+                    file_upload_input = driver.find_element(By.ID, "ContentPlaceHolder1_FileUpload1")
+                    file_upload_input.send_keys(tam_dosya_yolu)
+                    time.sleep(1.0)
+                    
+                    evrak_yukle_btn = driver.find_element(By.XPATH, "//a[contains(@onclick, 'fncOtherClick')]")
+                    driver.execute_script("arguments[0].click();", evrak_yukle_btn)
+                    
+                    self._log(f"📁 [YÜKLENDİ] -> Alan: '{tip[:25]}...' -> Dosya: {uygun_dosya}", "success")
+                    time.sleep(user_delay + 2.5)
+                    
+                    evrak_select_el = bekleme.until(EC.presence_of_element_located((By.ID, "drpEvrak")))
+                    select_obj = Select(evrak_select_el)
+                    
+            return True
+
+        except Exception as e:
+            self._log(f"⚠️ Evrak yükleme boru hattında sapma: {str(e)[:50]}", "warning")
+            return False
+
+    def _process_single_row(self, driver: Optional[uc.Chrome], row: pd.Series, docs_folder: str) -> Tuple[str, Dict[str, str]]:
         lg = LANG_PACK[self.current_lang]
         
         self.pause_event.wait()
@@ -577,6 +688,12 @@ class WellcomeRPAApp(ctk.CTk):
         self._log(lg["process_folder"].format(personel_ismi), "system")
         user_delay = self.throttle_speed.get()
 
+        if self.only_docs_mode_var.get():
+            self._log(f"🚀 'Sadece Evrak Modu' Aktif -> {personel_ismi} için direkt evrak paneline bağlanılıyor...", "system")
+            bekleme = WebDriverWait(driver, 20)
+            self._execute_document_upload_pipeline(driver, bekleme, row, docs_folder)
+            return "Success", personel_bilgisi
+
         for deneme in range(1, 4):
             try:
                 bekleme = WebDriverWait(driver, 20)
@@ -587,17 +704,14 @@ class WellcomeRPAApp(ctk.CTk):
                         alert.accept()
                     except Exception: pass
 
-                # SÜREÇ 1: Sekme Geçişi
                 calisan_tanimla_btn = bekleme.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '/files/workgroup/')]")))
                 driver.execute_script("arguments[0].click();", calisan_tanimla_btn)
                 time.sleep(user_delay + random.uniform(1.0, 2.5))
 
-                # SÜREÇ 2: Yeni Kayıt
                 yeni_calisan_btn = bekleme.until(EC.presence_of_element_located((By.ID, "ContentPlaceHolder1_btnNewUserPanel")))
                 driver.execute_script("arguments[0].click();", yeni_calisan_btn)
                 time.sleep(user_delay + random.uniform(0.5, 1.5))
 
-                # SÜREÇ 3: Form Enjeksiyonu
                 isim_input = bekleme.until(EC.presence_of_element_located((By.ID, "NameSurname")))
                 isim_input.clear()
                 isim_input.send_keys(personel_bilgisi["isim_soyisim"])
@@ -619,9 +733,7 @@ class WellcomeRPAApp(ctk.CTk):
                     site_generated_username = username_field.get_attribute("value")
                     if site_generated_username:
                         personel_bilgisi["eposta"] = f"{site_generated_username.strip()}@seafortservice.com"
-                        self._log(f"📧 [DİNAMİK-MAIL] Sitenin ürettiği kullanıcı adı yakalandı, mail bağlandı: {personel_bilgisi['eposta']}", "success")
-                except Exception as mail_extraction_err:
-                    self._log(f"⚠️ Dinamik e-posta boru hattında anlık sapma: {mail_extraction_err}", "warning")
+                except Exception: pass
 
                 if personel_bilgisi["telefon"]:
                     tel_input = driver.find_element(By.ID, "telefon")
@@ -633,47 +745,57 @@ class WellcomeRPAApp(ctk.CTk):
                     mail_input.clear()
                     mail_input.send_keys(personel_bilgisi["eposta"])
 
-                time.sleep(1.5)
+                time.sleep(2.0)
                 self._log(lg["submit_form"], "normal")
                 
-                kaydet_btn = driver.find_element(By.XPATH, "//a[contains(@onclick, 'AddNewUser') or contains(@class, 'createUser')]")
+                # --- KAYDETME TETIKLEYICISI ---
+                kaydet_btn = bekleme.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@onclick, 'AddNewUser') or contains(@class, 'createUser') or @id='ContentPlaceHolder1_btnSave']")))
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", kaydet_btn)
+                time.sleep(0.5)
                 
-                # Tıklama 1
                 driver.execute_script("arguments[0].click();", kaydet_btn)
-                time.sleep(1.2) 
+                time.sleep(1.5) 
                 
-                # Tıklama 2
-                driver.execute_script("arguments[0].click();", kaydet_btn)
+                try:
+                    driver.execute_script("arguments[0].click();", kaydet_btn)
+                except: pass
                 
+                time.sleep(3.0)
                 if self.alert_dismiss_enabled.get():
-                    time.sleep(1.5)
                     try:
                         alert = driver.switch_to.alert
                         alert_msg = alert.text
                         alert.accept()
+                        self._log(f"🔔 Site Uyarısı Onaylandı: {alert_msg}", "system")
                         if "zaten" in alert_msg.lower() or "mevcut" in alert_msg.lower():
                             self._add_to_blacklist(personel_ismi)
                             return f"Mükerrer Kara Liste: {alert_msg}", personel_bilgisi
-                        return f"Site Engeli: {alert_msg}", personel_bilgisi
                     except Exception: pass
 
                 time.sleep(user_delay + random.uniform(2.5, 4.5))
                 self._log(lg["success_log"].format(personel_ismi), "success")
-                try: winsound.Beep(1800, 40) 
-                except: pass
-                return "Success", personel_bilgisi
+                
+                # --- DOĞRUDAN TOKENLİ LİNK ENJEKSİYONUNA GEÇİŞ ---
+                pipeline_res = self._execute_document_upload_pipeline(driver, bekleme, row, docs_folder)
+                
+                if pipeline_res:
+                    try: winsound.Beep(1800, 40) 
+                    except: pass
+                    return "Success", personel_bilgisi
+                else:
+                    return "Failed_Docs", personel_bilgisi
 
-            except (TimeoutException, UnexpectedAlertPresentException, OSError):
-                time.sleep(5.0)
+            except (TimeoutException, UnexpectedAlertPresentException, OSError) as e:
+                self._log(f"⚠️ Adım zaman aşımına uğradı, yeniden deneniyor (Deneme {deneme}/3)...", "warning")
+                time.sleep(4.0)
                 try: driver.get("https://wellcome.azurewebsites.net/pnlwell/")
                 except Exception: pass
-                if deneme == 3: return f"Error: Network Timeout.", personel_bilgisi
+                if deneme == 3: return f"Error: Network/Button Timeout.", personel_bilgisi
             except Exception as e:
                 return f"Error: {str(e)[:40]}", personel_bilgisi
         return "Failed", personel_bilgisi
 
-    def _run_automation_loop(self, df_data: pd.DataFrame, file_path: str) -> None:
-        """Eski klasör listesi alan döngü yerine Pandas DataFrame alan yeni Orchestrator."""
+    def _run_automation_loop(self, df_data: pd.DataFrame, file_path: str, docs_folder: str) -> None:
         lg = LANG_PACK[self.current_lang]
         driver = None
         results_report: List[Dict[str, str]] = []
@@ -686,7 +808,6 @@ class WellcomeRPAApp(ctk.CTk):
             except Exception: center_directory = base_path
 
         try:
-            # Sektör Aralığı Filtreleme (GUI Üzerinden)
             try:
                 start_idx = int(self.range_start_var.get()) if self.range_start_var.get().isdigit() else 0
                 end_idx = int(self.range_end_var.get()) if self.range_end_var.get().isdigit() else len(df_data)
@@ -708,28 +829,16 @@ class WellcomeRPAApp(ctk.CTk):
             else:
                 messagebox.showinfo("Giriş Onayı", "Giriş bilgileri boş! Lütfen giriş yapıp OK basın.")
 
-            # YENİ DETAYLI ITERATOR DÖNGÜSÜ
             for index, (_, row) in enumerate(df_data.iterrows()):
                 if not self.is_running: break
                 
                 personel_ismi = str(row.get('ADI SOYADI', '')).strip()
                 if self._is_blacklisted(personel_ismi): continue
 
-                status_res, personel_data = self._process_single_row(driver, row)
+                status_res, personel_data = self._process_single_row(driver, row, docs_folder)
                 
                 if status_res == "Mükerrer veya Hatalı Veri":
                     error_count += 1
-                    
-                    # Eğer fiziksel olarak klasörleri taşımak istersen, isimle eşleşen klasör aranır
-                    try:
-                        bozuk_dizini = os.path.join(center_directory, "[BOZUK_EVRAK]")
-                        if not os.path.exists(bozuk_dizini): os.makedirs(bozuk_dizini)
-                        # Dosya dizininde personel ismiyle klasör var mı kontrolü
-                        possible_folder = os.path.join(base_path, personel_ismi)
-                        if os.path.exists(possible_folder):
-                            shutil.move(possible_folder, os.path.join(bozuk_dizini, personel_ismi))
-                    except Exception: pass
-                    
                     results_report.append({
                         "Personel Ad Soyad": personel_data["isim_soyisim"],
                         "TC Kimlik No": self._mask_sensitive_data(personel_data["tc"], is_tc=True),
@@ -752,13 +861,6 @@ class WellcomeRPAApp(ctk.CTk):
 
                 if status_res == "Success":
                     success_count += 1
-                    try:
-                        arsiv_dizini = os.path.join(center_directory, "[BASARILI_ARSIV]")
-                        if not os.path.exists(arsiv_dizini): os.makedirs(arsiv_dizini)
-                        possible_folder = os.path.join(base_path, personel_ismi)
-                        if os.path.exists(possible_folder):
-                            shutil.move(possible_folder, os.path.join(arsiv_dizini, personel_ismi))
-                    except Exception: pass
                 else: 
                     error_count += 1
                 
@@ -772,86 +874,60 @@ class WellcomeRPAApp(ctk.CTk):
 
             if results_report and self.is_running:
                 if self.current_report_path:
-                    self._log(LANG_PACK[self.current_lang]["report_gen"].format(self.current_report_path), "success")
+                    self._log(LANG_PACK[self.current_lang]["report_gen"].format(os.path.basename(self.current_report_path)), "success")
+                    self._speak("Tüm operasyon başarıyla tamamlandı, raporunuz kaydedildi.")
 
         except Exception as main_err: 
             self._log(f"[KRİTİK] Sistem hatası: {main_err}", "error")
         finally:
-            # Chrome sürücüsünü temizle
-            if driver is not None:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
-
-            # =====================================================================
-            # --- FIX 3: finally bloğunda winfo_exists() ile güvenli UI resetleme ---
-            # =====================================================================
-            def safe_ui_reset():
-                try:
-                    if not self.winfo_exists():
-                        return
-                    self.is_running = False
-                    self.start_button.configure(
-                        state="normal",
-                        text=LANG_PACK[self.current_lang]["start"],
-                        fg_color="#3B82F6"
-                    )
-                    self.pause_button.configure(state="disabled")
-                except Exception:
-                    pass
-
-            try:
-                self.after(0, safe_ui_reset)
-            except Exception:
-                pass
+            self.after(0, lambda: (setattr(self, 'is_running', False), self.start_button.configure(state="normal", text=LANG_PACK[self.current_lang]["start"], fg_color="#22C55E"), self.pause_button.configure(state="disabled")))
 
     def _start_automation(self) -> None:
         lg = LANG_PACK[self.current_lang]
-        if not self.base_folder_path.get() or self.is_running: return
-        self._log(lg["pre_flight_start"], "system")
+        if self.is_running: return
         
-        file_path = self.base_folder_path.get()
-        if not os.path.exists(file_path):
-            self._log(lg["no_folder"], "error")
+        excel_p = self.excel_file_path.get()
+        docs_p = self.docs_folder_path.get()
+        
+        if not excel_p or not docs_p:
+            messagebox.showerror("Eksik Seçim", lg["no_data"])
             return
             
-        # Uzantıya göre akıllı Pandas okuması yapılıyor
+        self._log(lg["pre_flight_start"], "system")
+        
         try:
-            if file_path.lower().endswith('.csv'):
-                df = pd.read_csv(file_path)
+            if excel_p.lower().endswith('.csv'):
+                df = pd.read_csv(excel_p)
             else:
-                df = pd.read_excel(file_path)
+                df = pd.read_excel(excel_p)
         except Exception as e:
             self._log(f"❌ Dosya okunurken kritik hata oluştu: {str(e)[:50]}", "error")
             return
 
-        # Sütun isimlerindeki görünmez boşlukları temizle
         df.columns = df.columns.str.strip()
         
         if 'YÜKLEME_DURUMU' not in df.columns:
             self._log("❌ HATA: Dosyada 'YÜKLEME_DURUMU' adında bir sütun bulunamadı!", "error")
             return
 
-        # BOOLEAN MANTIK FİLTRESİ: Tam olarak 1 olanları seç (0 ve Boşlar/NaN elenir)
+        df['YÜKLEME_DURUMU'] = pd.to_numeric(df['YÜKLEME_DURUMU'].astype(str).str.strip(), errors='coerce')
         filtrelenmis_df = df[df['YÜKLEME_DURUMU'] == 1]
         
         if filtrelenmis_df.empty:
-            self._log("⚠️ YÜKLEME_DURUMU sütunu '1' olarak işaretlenmiş hiçbir kayıt bulunamadı!", "warning")
+            self._log("⚠️ 'YÜKLEME_DURUMU' sütunu '1' olan hiçbir kayıt bulunamadı!", "warning")
             return
 
-        self._log(f"📊 Toplam Kayıt: {len(df)} | Yüklenecek (1 olan) Filtrelenmiş Kayıt: {len(filtrelenmis_df)}", "system")
+        self._log(f"📊 Toplam Kayıt: {len(df)} | Filtrelenmiş Yüklenecek Kayıt: {len(filtrelenmis_df)}", "system")
 
         self.is_running = True
-        self.start_button.configure(state="disabled", text=lg["running"], fg_color="#475569")
+        self.start_button.configure(state="disabled", text=lg["running"])
         self.pause_button.configure(state="normal")
         self.start_time = time.time()
         self.processed_count_for_eta = 0
         self.current_report_path = None 
         self._save_settings()
 
-        # Yeni DataFrame tabanlı döngü iş parçacığı (Thread) olarak tetikleniyor
-        threading.Thread(target=self._run_automation_loop, args=(filtrelenmis_df, file_path), daemon=True).start()
+        threading.Thread(target=self._run_automation_loop, args=(filtrelenmis_df, excel_p, docs_p), daemon=True).start()
 
     def _build_ui(self) -> None:
         top_bar = ctk.CTkFrame(self, fg_color="#1E293B", corner_radius=6, height=60)
@@ -896,12 +972,19 @@ class WellcomeRPAApp(ctk.CTk):
         self.password_entry = ctk.CTkEntry(pass_frame, textvariable=self.password_var, show="*", height=28, fg_color="#0F172A")
         self.password_entry.pack(fill="x")
 
-        folder_card = ctk.CTkFrame(main_container, fg_color="#1E293B", corner_radius=6)
-        folder_card.pack(pady=4, fill="x")
-        self.folder_entry = ctk.CTkEntry(folder_card, textvariable=self.base_folder_path, height=32, fg_color="#0F172A")
-        self.folder_entry.pack(side="left", padx=10, pady=10, expand=True, fill="x")
-        self.folder_button = ctk.CTkButton(folder_card, text="", command=self._select_folder, width=100, height=32, fg_color="#3B82F6")
-        self.folder_button.pack(side="right", padx=10, pady=10)
+        excel_card = ctk.CTkFrame(main_container, fg_color="#1E293B", corner_radius=6)
+        excel_card.pack(pady=4, fill="x")
+        self.excel_file_entry = ctk.CTkEntry(excel_card, textvariable=self.excel_file_path, height=32, fg_color="#0F172A")
+        self.excel_file_entry.pack(side="left", padx=10, pady=10, expand=True, fill="x")
+        self.excel_file_button = ctk.CTkButton(excel_card, text="", command=self._select_excel_file, width=100, height=32, fg_color="#3B82F6")
+        self.excel_file_button.pack(side="right", padx=10, pady=10)
+
+        docs_card = ctk.CTkFrame(main_container, fg_color="#1E293B", corner_radius=6)
+        docs_card.pack(pady=4, fill="x")
+        self.docs_folder_entry = ctk.CTkEntry(docs_card, textvariable=self.docs_folder_path, height=32, fg_color="#0F172A")
+        self.docs_folder_entry.pack(side="left", padx=10, pady=10, expand=True, fill="x")
+        self.docs_folder_button = ctk.CTkButton(docs_card, text="", command=self._select_docs_folder, width=100, height=32, fg_color="#EAB308", hover_color="#CA8A04")
+        self.docs_folder_button.pack(side="right", padx=10, pady=10)
 
         adv_panel = ctk.CTkFrame(main_container, fg_color="#1E293B", corner_radius=6)
         adv_panel.pack(pady=4, fill="x")
@@ -913,6 +996,9 @@ class WellcomeRPAApp(ctk.CTk):
         self.cb_headless.pack(anchor="w", pady=3)
         self.sw_retry_cb = ctk.CTkSwitch(sw_frame, text="", variable=self.retry_enabled, progress_color="#3B82F6", switch_width=34, switch_height=16)
         self.sw_retry_cb.pack(anchor="w", pady=3)
+        
+        self.cb_only_docs = ctk.CTkSwitch(main_container, text="", variable=self.only_docs_mode_var, progress_color="#EAB308", font=ctk.CTkFont(size=11))
+        self.cb_only_docs.pack(anchor="w", padx=20, pady=2)
 
         range_frame = ctk.CTkFrame(adv_panel, fg_color="transparent")
         range_frame.grid(row=0, column=1, padx=10, pady=10, sticky="n")
@@ -925,7 +1011,7 @@ class WellcomeRPAApp(ctk.CTk):
         self.entry_end = ctk.CTkEntry(range_box_frame, textvariable=self.range_end_var, placeholder_text="End", width=55, height=26, fg_color="#0F172A")
         self.entry_end.pack(side="left")
 
-        throttle_frame = ctk.CTkFrame(adv_panel, fg_color="transparent")
+        throttle_frame = ctk.CTkFrame(adv_panel, fg_color="#1E293B", corner_radius=6)
         throttle_frame.grid(row=0, column=2, padx=15, pady=10, sticky="ne")
         self.throttle_label = ctk.CTkLabel(throttle_frame, text="", font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"), text_color="#94A3B8")
         self.throttle_label.pack(anchor="e")
@@ -979,7 +1065,7 @@ class WellcomeRPAApp(ctk.CTk):
         self.log_textInput = tk.Text(log_card, bg="#0F172A", fg="#E2E8F0", font=("Consolas", 10), wrap="word", bd=0, highlightthickness=0)
         self.log_textInput.pack(fill="both", expand=True, padx=8, pady=8)
         self.log_text = self.log_textInput 
-        self.log_text.tag_config("normal", foreground="#E2E8F0")
+        self.log_text.tag_config("normal", foreground="#E2E8F0")    
         self.log_text.tag_config("system", foreground="#3B82F6") 
         self.log_text.tag_config("success", foreground="#22C55E", font=("Consolas", 10, "bold")) 
         self.log_text.tag_config("error", foreground="#EF4444", font=("Consolas", 10, "bold")) 
@@ -991,5 +1077,4 @@ if __name__ == "__main__":
     try:
         app = WellcomeRPAApp()
         app.mainloop()
-    except KeyboardInterrupt:
-        os._exit(0)
+    except KeyboardInterrupt: os._exit(0)

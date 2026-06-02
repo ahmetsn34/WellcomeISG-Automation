@@ -255,32 +255,19 @@ class WellcomeRPAApp(ctk.CTk):
             self.pause_button.configure(text=lg["pause"], fg_color="#64748B", hover_color="#475569")
             self._log(f"[SİSTEM] {lg['resume']} - Otomasyon kaldığı yerden devam ediyor...", "system")
 
-    # =====================================================================
-    # --- FIX 1: _log metoduna pencere var mı? guard + try/except zırhı ---
-    # =====================================================================
     def _log(self, message: str, tag: str = "normal") -> None:
         def update_gui():
+            self.log_text.configure(state="normal")
             try:
-                # Pencere hâlâ yaşıyor mu? Kapatılmışsa işlem yapma.
-                if not self.winfo_exists():
-                    return
-                self.log_text.configure(state="normal")
-                try:
-                    line_count = int(self.log_text.index('end-1c').split('.')[0])
-                    if line_count > 200:
-                        self.log_text.delete("1.0", "20.0")
-                except Exception:
-                    pass
-                self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')} - {message}\n", tag)
-                self.log_text.see(tk.END)
-                self.log_text.configure(state="disabled")
-            except Exception:
-                pass  # Pencere destroy edilmişse sessizce geç
+                line_count = int(self.log_text.index('end-1c').split('.')[0])
+                if line_count > 200:
+                    self.log_text.delete("1.0", "20.0")
+            except Exception: pass
 
-        try:
-            self.after(0, update_gui)
-        except Exception:
-            pass  # after() pencere yoksa hata fırlatır, yutuyoruz
+            self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')} - {message}\n", tag)
+            self.log_text.see(tk.END)
+            self.log_text.configure(state="disabled")
+        self.after(0, update_gui)
 
     def _on_lang_change(self, choice: str) -> None:
         self.current_lang = choice
@@ -288,7 +275,6 @@ class WellcomeRPAApp(ctk.CTk):
         self._save_settings()
 
     def _select_folder(self) -> None:
-        # KLASÖR YERİNE MANUEL DOSYA SEÇİMİ ENJEKTE EDİLDİ
         path = filedialog.askopenfilename(
             title="WellcomeRPA Veri Dosyasını Seçin",
             filetypes=[("Excel ve CSV Dosyaları", "*.xlsx *.xls *.csv")]
@@ -306,8 +292,8 @@ class WellcomeRPAApp(ctk.CTk):
         return digits
 
     def _mask_sensitive_data(self, value: str, is_tc: bool = True) -> str:
-        if not value or value == "00000000000": return "---"
-        value = str(value).split('.')[0] # Float dönüşüm koruması
+        if not value or value == "00000000000" or value == "nan": return "---"
+        value = str(value).split('.')[0]
         if is_tc and len(value) == 11:
             return f"{value[:3]}******{value[-2:]}"
         elif not is_tc and len(value) >= 7:
@@ -333,20 +319,6 @@ class WellcomeRPAApp(ctk.CTk):
         otp_box = ctk.CTkInputDialog(text=lg["otp_prompt"], title=lg["otp_title"])
         otp_code = otp_box.get_input()
         return otp_code if otp_code else ""
-
-    def _check_folder_health(self, folder_path: str) -> Tuple[bool, str]:
-        if not os.path.exists(folder_path):
-            return False, "Klasör bulunamadı"
-            
-        pdf_dosyalari = [f for f in os.listdir(folder_path) if f.upper().endswith('.PDF')]
-        if not pdf_dosyalari:
-            return False, "Klasörün içi boş veya PDF dosyası mevcut değil"
-            
-        target_pdf = os.path.join(folder_path, pdf_dosyalari[0])
-        if os.path.getsize(target_pdf) == 0:
-            return False, "PDF dosyası bozuk veya 0 KB (OneDrive Senkronizasyon Hatası)"
-            
-        return True, "Sağlıklı"
 
     def _is_blacklisted(self, folder_name: str) -> bool:
         if os.path.exists(self.blacklist_file):
@@ -411,37 +383,17 @@ class WellcomeRPAApp(ctk.CTk):
         self._load_settings() 
         self._build_ui()  
         self._update_ui_texts()
-        logger.info("Application initialized with explicit dual-selection paths.")
-
-        # =====================================================================
-        # --- FIX 2: Pencere kapatma protokolü — after() döngüsünü güvenli sonlandırır ---
-        # =====================================================================
-        self.protocol("WM_DELETE_WINDOW", self._on_closing)
-
-    def _on_closing(self) -> None:
-        """Pencere kapatıldığında arka plan thread'ini ve after() döngüsünü temiz kapatır."""
-        self.is_running = False          # Thread döngüsünü durdur
-        self.pause_event.set()           # Duraklatılmışsa devam et ki thread takılı kalmasın
-        self._save_settings()
-        try:
-            self.quit()
-            self.destroy()
-        except Exception:
-            pass
+        logger.info("Application initialized with fixed class hierarchy.")
 
     def _read_personel_from_row(self, row: pd.Series) -> Dict[str, str]:
-        """Excel satırından doğrudan temiz verileri çeker."""
         ad_soyadi = str(row.get('ADI SOYADI', 'Bilinmeyen Personel')).strip()
         
-        # TC Numarasını Float bozulmasından koruyarak string'e çeviriyoruz
         tc_raw = str(row.get('T.C. Kimlik Numarası', ''))
         tc_clean = tc_raw.split('.')[0].strip()
         
-        # Telefon temizleme
         tel_raw = str(row.get('TELEFON NUMARASI', ''))
         tel_clean = self._clean_phone_number(tel_raw)
         
-        # Görev Alanı
         gorev_clean = str(row.get('GÖREVİ', 'Personel')).strip()
         if g_clean := gorev_clean if gorev_clean != 'nan' else 'Personel':
             gorev_clean = g_clean
@@ -455,7 +407,6 @@ class WellcomeRPAApp(ctk.CTk):
             "valid_record": True
         }
 
-        # Validasyon Kontrolleri
         if not self._validate_tc_kn(veriler["tc"]):
             self._log(f"❌ [ALGORİTMA HATASI] {ad_soyadi} -> T.C. doğrulamayı geçemedi!", "error")
             veriler["valid_record"] = False
@@ -464,7 +415,6 @@ class WellcomeRPAApp(ctk.CTk):
             self._log(f"❌ [VERİ EKSİK] {ad_soyadi} -> Telefona ulaşılamadı!", "error")
             veriler["valid_record"] = False
 
-        # Statik E-Posta Yedek Planı
         char_map = {'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i', 'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u'}
         cleaned_name = "".join([char_map.get(c, c) for c in veriler["isim_soyisim"].lower() if c.isalnum() or c.isspace()])
         veriler["eposta"] = f"{cleaned_name.replace(' ', '.')}@seafortservice.com"
@@ -564,7 +514,6 @@ class WellcomeRPAApp(ctk.CTk):
             return False
 
     def _process_single_row(self, driver: Optional[uc.Chrome], row: pd.Series) -> Tuple[str, Dict[str, str]]:
-        """Klasör yerine doğrudan Excel row verisini işleyen ana form enjeksiyonu."""
         lg = LANG_PACK[self.current_lang]
         
         self.pause_event.wait()
@@ -619,9 +568,9 @@ class WellcomeRPAApp(ctk.CTk):
                     site_generated_username = username_field.get_attribute("value")
                     if site_generated_username:
                         personel_bilgisi["eposta"] = f"{site_generated_username.strip()}@seafortservice.com"
-                        self._log(f"📧 [DİNAMİK-MAIL] Sitenin ürettiği kullanıcı adı yakalandı, mail bağlandı: {personel_bilgisi['eposta']}", "success")
+                        self._log(f"📧 [DİNAMİK-MAIL] Kullanıcı adı yakalandı, mail bağlandı: {personel_bilgisi['eposta']}", "success")
                 except Exception as mail_extraction_err:
-                    self._log(f"⚠️ Dinamik e-posta boru hattında anlık sapma: {mail_extraction_err}", "warning")
+                    self._log(f"⚠️ Dinamik e-posta boru hattında sapma: {mail_extraction_err}", "warning")
 
                 if personel_bilgisi["telefon"]:
                     tel_input = driver.find_element(By.ID, "telefon")
@@ -673,7 +622,6 @@ class WellcomeRPAApp(ctk.CTk):
         return "Failed", personel_bilgisi
 
     def _run_automation_loop(self, df_data: pd.DataFrame, file_path: str) -> None:
-        """Eski klasör listesi alan döngü yerine Pandas DataFrame alan yeni Orchestrator."""
         lg = LANG_PACK[self.current_lang]
         driver = None
         results_report: List[Dict[str, str]] = []
@@ -686,7 +634,6 @@ class WellcomeRPAApp(ctk.CTk):
             except Exception: center_directory = base_path
 
         try:
-            # Sektör Aralığı Filtreleme (GUI Üzerinden)
             try:
                 start_idx = int(self.range_start_var.get()) if self.range_start_var.get().isdigit() else 0
                 end_idx = int(self.range_end_var.get()) if self.range_end_var.get().isdigit() else len(df_data)
@@ -708,7 +655,6 @@ class WellcomeRPAApp(ctk.CTk):
             else:
                 messagebox.showinfo("Giriş Onayı", "Giriş bilgileri boş! Lütfen giriş yapıp OK basın.")
 
-            # YENİ DETAYLI ITERATOR DÖNGÜSÜ
             for index, (_, row) in enumerate(df_data.iterrows()):
                 if not self.is_running: break
                 
@@ -719,12 +665,9 @@ class WellcomeRPAApp(ctk.CTk):
                 
                 if status_res == "Mükerrer veya Hatalı Veri":
                     error_count += 1
-                    
-                    # Eğer fiziksel olarak klasörleri taşımak istersen, isimle eşleşen klasör aranır
                     try:
                         bozuk_dizini = os.path.join(center_directory, "[BOZUK_EVRAK]")
                         if not os.path.exists(bozuk_dizini): os.makedirs(bozuk_dizini)
-                        # Dosya dizininde personel ismiyle klasör var mı kontrolü
                         possible_folder = os.path.join(base_path, personel_ismi)
                         if os.path.exists(possible_folder):
                             shutil.move(possible_folder, os.path.join(bozuk_dizini, personel_ismi))
@@ -777,46 +720,18 @@ class WellcomeRPAApp(ctk.CTk):
         except Exception as main_err: 
             self._log(f"[KRİTİK] Sistem hatası: {main_err}", "error")
         finally:
-            # Chrome sürücüsünü temizle
-            if driver is not None:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
-
-            # =====================================================================
-            # --- FIX 3: finally bloğunda winfo_exists() ile güvenli UI resetleme ---
-            # =====================================================================
-            def safe_ui_reset():
-                try:
-                    if not self.winfo_exists():
-                        return
-                    self.is_running = False
-                    self.start_button.configure(
-                        state="normal",
-                        text=LANG_PACK[self.current_lang]["start"],
-                        fg_color="#3B82F6"
-                    )
-                    self.pause_button.configure(state="disabled")
-                except Exception:
-                    pass
-
-            try:
-                self.after(0, safe_ui_reset)
-            except Exception:
-                pass
+            self.after(0, lambda: (setattr(self, 'is_running', False), self.start_button.configure(state="normal", text=LANG_PACK[self.current_lang]["start"], fg_color="#3B82F6"), self.pause_button.configure(state="disabled")))
 
     def _start_automation(self) -> None:
         lg = LANG_PACK[self.current_lang]
-        if not self.base_folder_path.get() or self.is_running: return
+        file_path = self.base_folder_path.get().strip()
+        if not file_path or self.is_running: return
         self._log(lg["pre_flight_start"], "system")
         
-        file_path = self.base_folder_path.get()
         if not os.path.exists(file_path):
             self._log(lg["no_folder"], "error")
             return
             
-        # Uzantıya göre akıllı Pandas okuması yapılıyor
         try:
             if file_path.lower().endswith('.csv'):
                 df = pd.read_csv(file_path)
@@ -826,18 +741,21 @@ class WellcomeRPAApp(ctk.CTk):
             self._log(f"❌ Dosya okunurken kritik hata oluştu: {str(e)[:50]}", "error")
             return
 
-        # Sütun isimlerindeki görünmez boşlukları temizle
+        # Sütun isimlerindeki görünmez sağ/sol boşlukları temizle
         df.columns = df.columns.str.strip()
         
-        if 'YÜKLEME_DURUMU' not in df.columns:
-            self._log("❌ HATA: Dosyada 'YÜKLEME_DURUMU' adında bir sütun bulunamadı!", "error")
+        # Güncellenen yeni sütun ismi kontrolü
+        hedef_sutun = 'BOOLEN'
+        if hedef_sutun not in df.columns:
+            self._log(f"❌ HATA: Dosyada '{hedef_sutun}' adında bir sütun bulunamadı!", "error")
             return
 
-        # BOOLEAN MANTIK FİLTRESİ: Tam olarak 1 olanları seç (0 ve Boşlar/NaN elenir)
-        filtrelenmis_df = df[df['YÜKLEME_DURUMU'] == 1]
+        # Sayısal filtre zırhı: 1 veya '1' olanları zorla seç, boş/NaN olanları 0 yap
+        df[hedef_sutun] = pd.to_numeric(df[hedef_sutun], errors='coerce').fillna(0).astype(int)
+        filtrelenmis_df = df[df[hedef_sutun] == 1]
         
         if filtrelenmis_df.empty:
-            self._log("⚠️ YÜKLEME_DURUMU sütunu '1' olarak işaretlenmiş hiçbir kayıt bulunamadı!", "warning")
+            self._log(f"⚠️ {hedef_sutun} sütunu '1' olarak işaretlenmiş hiçbir kayıt bulunamadı!", "warning")
             return
 
         self._log(f"📊 Toplam Kayıt: {len(df)} | Yüklenecek (1 olan) Filtrelenmiş Kayıt: {len(filtrelenmis_df)}", "system")
@@ -850,7 +768,6 @@ class WellcomeRPAApp(ctk.CTk):
         self.current_report_path = None 
         self._save_settings()
 
-        # Yeni DataFrame tabanlı döngü iş parçacığı (Thread) olarak tetikleniyor
         threading.Thread(target=self._run_automation_loop, args=(filtrelenmis_df, file_path), daemon=True).start()
 
     def _build_ui(self) -> None:
@@ -991,5 +908,4 @@ if __name__ == "__main__":
     try:
         app = WellcomeRPAApp()
         app.mainloop()
-    except KeyboardInterrupt:
-        os._exit(0)
+    except KeyboardInterrupt: os._exit(0)
