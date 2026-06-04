@@ -92,7 +92,7 @@ except ImportError:
 LANG_PACK = {
     "TR": {
         "title": "WELLCOME // AUTOMATION SUITE",
-        "subtitle": "Enterprise RPA Control Panel v3.1 Stable",
+        "subtitle": "Enterprise RPA Control Panel v3.4 AI Final Stable",
         "select_file": "Excel Seç",
         "select_folder": "Klasör Seç",
         "placeholder_file": "WellcomeVeri Excel/CSV dosyasını bağlayın...",
@@ -131,7 +131,7 @@ LANG_PACK = {
     },
     "EN": {
         "title": "WELLCOME // AUTOMATION SUITE",
-        "subtitle": "Enterprise RPA Control Panel v3.1 Stable",
+        "subtitle": "Enterprise RPA Control Panel v3.4 AI Final Stable",
         "select_file": "Browse Excel",
         "select_folder": "Browse Folder",
         "placeholder_file": "Select WellcomeVeri Excel/CSV file...",
@@ -376,13 +376,18 @@ class WellcomeRPAApp(ctk.CTk):
         mins, secs = divmod(total_seconds, 60)
         return f"{mins:02d}:{secs:02d}"
 
+    def _clean_turkish_chars(self, text: str) -> str:
+        mapping = {'İ': 'I', 'I': 'I', 'Ş': 'S', 'Ğ': 'G', 'Ç': 'C', 'Ü': 'U', 'Ö': 'O', 'ı': 'i', 'ş': 's', 'ğ': 'g', 'ç': 'c', 'ü': 'u', 'ö': 'o'}
+        for tr_char, eng_char in mapping.items():
+            text = text.replace(tr_char, eng_char)
+        return text.upper()
+
     def __init__(self) -> None:
         super().__init__()
 
         self.settings_file = "settings.json"
         self.checkpoint_file = "checkpoint.json"
         self.blacklist_file = "blacklist.json"
-        self.geometry("720x750")
 
         self.excel_file_path = tk.StringVar()
         self.docs_folder_path = tk.StringVar()
@@ -412,7 +417,10 @@ class WellcomeRPAApp(ctk.CTk):
         self._load_settings() 
         self._build_ui()  
         self._update_ui_texts()
-        logger.info("Application re-initialized with standard load strategy.")
+        
+        # --- [GEOMETRİ KİLİTLEME MİLESTONE]: Pencere boyutu her halükarda 720x750 kalacak ---
+        self.geometry("720x750")
+        logger.info("Application re-initialized with normal load strategy.")
 
     def _read_personel_from_row(self, row: pd.Series) -> Dict[str, str]:
         ad_soyadi = str(row.get('ADI SOYADI', 'Bilinmeyen Personel')).strip()
@@ -443,8 +451,7 @@ class WellcomeRPAApp(ctk.CTk):
             self._log(f"❌ [VERİ EKSİK] {ad_soyadi} -> Telefon numarası tespit edilemedi!", "error")
             veriler["valid_record"] = False
 
-        char_map = {'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i', 'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u'}
-        cleaned_name = "".join([char_map.get(c, c) for c in veriler["isim_soyisim"].lower() if c.isalnum() or c.isspace()])
+        cleaned_name = "".join([c for c in self._clean_turkish_chars(veriler["isim_soyisim"]).lower() if c.isalnum() or c.isspace()])
         veriler["eposta"] = f"{cleaned_name.replace(' ', '.')}@seafortservice.com"
 
         return veriler
@@ -538,7 +545,7 @@ class WellcomeRPAApp(ctk.CTk):
                 driver.execute_script("arguments[0].value = arguments[1];", otp_input, user_otp)
                 time.sleep(0.5)
                 
-                otp_submit_btn = bekleme.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(@class, 'btn-sms-verification') or text()='Doğrula ve Giriş Yap']")))
+                otp_submit_btn = bekleme.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@class, 'btn-sms-verification') or text()='Doğrula ve Giriş Yap']")))
                 driver.execute_script("arguments[0].click();", otp_submit_btn) 
                 time.sleep(3.0)
             return True
@@ -547,11 +554,11 @@ class WellcomeRPAApp(ctk.CTk):
             return False
 
     # =====================================================================
-    # --- ANLIK OKUMA GÜVENLİĞİ ARTIRILMIŞ AI TAHMİN ALGORİTMASI ---
+    # --- NO-TOUCH ISG REVIZYONLU VE KESİN KİLİTLİ AI TAHMİN MOTORU ---
     # =====================================================================
     def _analyze_document_content_ai(self, file_path: str) -> Optional[str]:
         text_content = ""
-        filename_upper = os.path.basename(file_path).upper().replace('İ', 'I')
+        filename_clean = self._clean_turkish_chars(os.path.basename(file_path))
         
         if file_path.lower().endswith('.pdf'):
             try:
@@ -561,27 +568,22 @@ class WellcomeRPAApp(ctk.CTk):
             except Exception:
                 pass
 
-        # Lokalde patlayan OCR motorunun kilit oluşturmasını önleyen Saf Filtre
-        if not text_content.strip():
-            try:
-                ocr_config = r'--oem 3 --psm 6'
-                if not file_path.lower().endswith('.pdf'):
-                    text_content = pytesseract.image_to_string(Image.open(file_path), lang='tur', config=ocr_config)
-            except Exception:
-                pass
+        text_content = self._clean_turkish_chars(text_content)
 
-        text_content = text_content.upper().replace('İ', 'I')
-
-        # Geliştirilmiş ve Çapraz Varyasyonlu Kelime Ağı Matrisi
+        # Kelime sızıntılarını ve İSG evrak çakışmasını sıfırlayan akıllı matris havuzu
         evrak_ai_weights = {
-            "Adli Sicil Belgesi": ["ADLI SICIL", "SABIKA KAYDI", "ARSIV KAYDI", "ADALET BAKANLIGI", "CEZA DAIRESI", "ADLI", "SICIL", "SABIKA"],
-            "Nüfus Cüzdanı Sadece Ön Yüz": ["T.C. KIMLIK KARTI", "NUFUS CUZDANI", "DOGUM TARIHI", "SERI NO", "ANA ADI", "BABA ADI", "KIMLIK NUMARASI", "KIMLIK", "UYRUGU", "KIMLIK KARTI"],
+            "Adli Sicil Belgesi": ["ADLI SICIL", "SABIKA KAYDI", "ARSIV KAYDI"],
+            "Geçici Görevlendirme Belgesi": ["GOREVLENDIRME", "GECICI", "GEÇİCİ GÖREVLENDİRME", "GOREVLENDIRME FORMU"],
+            "Kişisel Koruyucu Donanım Zimmet Formu": ["DONANIM ZIMMET", "KKD ZIMMET", "ZIMMET FORMU", "TESLIM FORMU", "KORUYUCU DONANIM", "DONANIM"],
+            "Nüfus Cüzdanı Sadece Ön Yüz": ["T.C. KIMLIK KARTI", "NUFUS CUZDANI", "DOGUM TARIHI", "SERI NO", "KIMLIK NUMARASI", "KIMLIK KARTI", "KIMLIK", "KİMLİK"],
             "Sürücü Belgesi": ["SURUCU BELGESI", "EHLIYET", "KULLANILDIGI ARACLAR", "BELGE NO", "SURUCU"],
-            "SGK İşe Giriş Bildirgesi": ["SIGORTALI ISE GIRIS", "BILDIRGESI", "4A", "4B", "SGK", "SOSYAL GUVENLIK KURUMU", "ISE GIRIS BILDIRGESI", "ISE GIRIS", "GIRIS BILDIRGESI", "BILDIRGE"],
-            "İş Yeri Hekimi Kanaat Raporu": ["SAGLIK RAPORU", "ISYERI HEKIMI", "KANAAT", "FIZIKSEL MUAYENE", "ISE UYGUNDUR", "MUAYENE FORMU", "HEKIMI KANAAT", "PERIYODIK MUAYENE", "SAGLIK", "RAPOR", "HEKIM", "DOKTOR", "EK-2", "EK 2"],
-            "Temel İş Sağlığı ve Güvenliği Eğitim Sertifikası": ["IS SAGLIGI VE GUVENLIGI", "EGITIM SERTIFIKASI", "ISG EGITIMI", "BASARI BELGESI", "TEMEL ISG", "SAGLIGI VE GUVENLIGI EGITIM", "ISG", "EGITIM", "SERTIFIKA", "TEMEL EGITIM"],
-            "Mesleki Yeterlilik Belgesi": ["MESLEKI YETERLILIK", "MYK", "YETERLILIK BELGESI", "MESLEK KODU", "MUAFIYET", "YETERLILIK", "OPERATOR", "MESLEKİ YETERLİLİK BELGESİ"],
-            "İş Sağlığı ve Güvenliği Talimat ve Taahhütnamesi": ["TALIMAT VE TAAHHUTNAMESI", "TAAHHUTNAME", "MADDELERINI", "TEBELLUG", "TALIMATNAME", "OZGU TALIMATNAME", "TAAHHUT", "TALIMAT", "KORUYUCU DONANIM", "DONANIM"]
+            "SGK İşe Giriş bildiğresi / SGK Bağ-Kur Kaydı Belgesi /Emekli Durum Belgesi": ["SIGORTALI ISE GIRIS", "BILDIRGESI", "4A", "İŞE GİRİŞ BİLDİRGESİ", "GIRIS BILDIRGESI", "SGK"],
+            "İş Yeri Hekimi Kanaat Raporu / OGUK": ["SAGLIK RAPORU", "ISYERI HEKIMI", "KANAAT", "FIZIKSEL MUAYENE", "ISE UYGUNDUR", "MUAYENE FORMU", "HEKIMI KANAAT", "EK-2", "EK 2", "OGUK"],
+            "Temel İş Sağlığı ve Güvenliği Eğitim Sertifikası": ["TEMEL EGITIM", "TEMEL EGITIM SERTIFIKASI", "16 SAAT"],
+            "Yapılacak İşin Gerekliliği Olan Mesleki Yeterlilik Belgesi (MYK,EKAT, operatörlük belgesi vb.)": ["MESLEKI YETERLILIK", "MYK", "YETERLILIK BELGESI", "MESLEK KODU", "MUAFIYET", "MESLEKİ YETERLİLİK BELGESİ", "MUAFİYET"],
+            "İş Sağlığı ve Güvenliği Talimat ve Taahhütnamesi": ["TALIMAT VE TAAHHUTNAMESI", "TAAHHUTNAME", "MADDELERINI", "TEBELLUG", "TALIMATNAME", "İŞ SAĞLIĞI VE GÜVENLİĞİ"],
+            "Yapılacak İşen Özgü Talimatlar ve Taahhütnameler": ["OZGU TALIMATNAME", "YAPILACAK ISEN OZGU", "OZGU TALIMATLAR", "YAPILACAK ISE OZGU TALIMATNAME", "OZGU TALIMAT", "ISEN OZGU", "İŞEN ÖZGÜ"],
+            "Yapılacak İşe Özgü Eğitim Sertifikası (yüksekte çalışma, kapalı alanlarda çalışma vb.)": ["YUKSEKTE CALISMA", "KAPALI ALAN", "OZGU EGITIM", "YÜKSEKTE ÇALIŞMA BELGESI", "YUKSEKTE", "CALISMA BELGESI"]
         }
 
         best_match = None
@@ -589,11 +591,18 @@ class WellcomeRPAApp(ctk.CTk):
 
         for evrak_tipi, anahtar_kelimeler in evrak_ai_weights.items():
             score = 0
+            
+            # --- OVERRIDE ZIRHI: DOSYA ADI EŞLEŞİRSE DOĞRUDAN 1000 PUAN BASILIR ---
             for kelime in anahtar_kelimeler:
-                if text_content and kelime in text_content:
-                    score += text_content.count(kelime) * 10
-                if kelime in filename_upper:
-                    score += 25  # Tesseract patlasa bile dosya isminden kurtaracak yüksek ağırlık
+                cleaned_keyword = self._clean_turkish_chars(kelime)
+                if cleaned_keyword in filename_clean:
+                    score += 1000  
+                    
+            if score == 0:
+                for kelime in anahtar_kelimeler:
+                    cleaned_keyword = self._clean_turkish_chars(kelime)
+                    if text_content and cleaned_keyword in text_content:
+                        score += text_content.count(cleaned_keyword) * 10
 
             if score > max_score:
                 max_score = score
@@ -640,10 +649,10 @@ class WellcomeRPAApp(ctk.CTk):
                 tahmin_edilen_tip = self._analyze_document_content_ai(tam_dosya_yolu)
                 
                 if not tahmin_edilen_tip:
-                    self._log(f"❓ AI Belgeyi Tanıyamadı: {dosya} (Pas geçiliyor)", "warning")
+                    self._log(f"❓ AI Belgeyi Güvenli Şekilde Tanıyamadı veya Eşleştiremedi: {dosya} (Pas geçiliyor)", "warning")
                     continue
                     
-                self._log(f"🎯 AI Belge Türünü Teşhis Etti: [ {tahmin_edilen_tip} ]", "success")
+                self._log(f"🎯 AI Belge Türünü Teşhis Etti: [ {tahmin_edilen_tip[:40]}... ]", "success")
 
                 # SELECT2 AD SOYAD KİLİTLEME PROSESİ
                 bekleme = WebDriverWait(driver, 25)
@@ -702,16 +711,19 @@ class WellcomeRPAApp(ctk.CTk):
                 hedef_value = None
                 hedef_görünür_metin = ""
                 
+                tahmin_clean = self._clean_turkish_chars(tahmin_edilen_tip).strip()
                 for val, text in sitedeki_opsiyonlar:
-                    if tahmin_edilen_tip.upper() in text.upper() or text.upper() in tahmin_edilen_tip.upper():
+                    text_clean = self._clean_turkish_chars(text).strip()
+                    if tahmin_clean in text_clean or text_clean in tahmin_clean:
                         hedef_value = val
                         hedef_görünür_metin = text
                         break
                         
                 if not hedef_value:
-                    kisa_kok = tahmin_edilen_tip.split()[0]
+                    kisa_kok = tahmin_clean.split()[0]
                     for val, text in sitedeki_opsiyonlar:
-                        if kisa_kok.upper() in text.upper():
+                        text_clean = self._clean_turkish_chars(text).strip()
+                        if kisa_kok in text_clean:
                             hedef_value = val
                             hedef_görünür_metin = text
                             break
@@ -864,7 +876,7 @@ class WellcomeRPAApp(ctk.CTk):
                     return "Failed_Docs", personel_bilgisi
 
             except Exception as loop_err:
-                self._log(f"⚠️ Adımda sapma, yeniden deneniyor (Deneme {deneme}/3)... Hata: {str(loop_err)[:30]}", "warning")
+                self._log(f"⚠️ Adımda sapma, yeniden dangerously deneniyor (Deneme {deneme}/3)... Hata: {str(loop_err)[:30]}", "warning")
                 time.sleep(4.0)
                 try:
                     driver.switch_to.alert.accept()
@@ -919,7 +931,7 @@ class WellcomeRPAApp(ctk.CTk):
                 if status_res == "Mükerrer veya Hatalı Veri":
                     error_count += 1
                     results_report.append({
-                        "Personel Ad Soyad": personel_data["isim_soyisim"] if "isim_soyisim" in personel_data else "Bilinmeyen",
+                        "Personel Ad Soyad": personel_data["isim_soyisim"] if "isim_soyisim" in presidential_data else "Bilinmeyen",
                         "TC Kimlik No": self._mask_sensitive_data(personel_data["tc"], is_tc=True),
                         "Telefon No": self._mask_sensitive_data(personel_data["telefon"], is_tc=False),
                         "İşlem Durumu": "Bozuk / Eksik Evrak", "Detay": "Zorunlu telefon veya TC doğrulaması geçemedi.",
@@ -929,7 +941,7 @@ class WellcomeRPAApp(ctk.CTk):
                     continue
 
                 results_report.append({
-                    "Personel Ad Soyad": personel_data["isim_soyisim"],
+                    "Personel Ad Soyad": personel_data["isim_soyisim"] if "isim_soyisim" in personel_data else "Bilinmeyen",
                     "TC Kimlik No": self._mask_sensitive_data(personel_data["tc"], is_tc=True),
                     "Telefon No": self._mask_sensitive_data(personel_data["telefon"], is_tc=False),
                     "İşlem Durumu": "Başarılı" if status_res == "Success" else "Hata/Engel",
@@ -980,7 +992,7 @@ class WellcomeRPAApp(ctk.CTk):
             else:
                 df = pd.read_excel(excel_p)
         except Exception as e:
-            self._log(f"❌ Dosya okunurken kritik hata oluştu: {str(e)[:50]}", "error")
+            self._log(f"❌ Dosya okunurken kritik Hata oluştu: {str(e)[:50]}", "error")
             return
 
         df.columns = df.columns.str.strip()
