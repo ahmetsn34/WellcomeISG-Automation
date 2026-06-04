@@ -1,55 +1,47 @@
-# 🤖 GUI Web Automation & Data Entry Tool
+# Sea Fort RPA AI - Wellcome Automation Suite
 
-A professional, GUI-based desktop automation application designed to streamline operational workflows. It automatically parses local data sources and handles high-volume, repetitive data entry tasks into web interfaces securely and efficiently.
+<p align="center">
+  <a href="README.md">🇹🇷 Türkçe</a> | 
+  <a href="README_EN.md">🇺🇸 English</a>
+</p>
+
+---
+# Sea Fort RPA AI - Wellcome Otomasyon Süiti
+
+[![Python Version](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10-blue)](https://www.python.org/)
+[![Framework](https://img.shields.io/badge/UI-CustomTkinter-orange)](https://github.com/TomSchimansky/CustomTkinter)
+[![Automation](https://img.shields.io/badge/Stealth-Undetected__Chromedriver-brightgreen)](https://github.com/ultrafunkamsterdam/undetected-chromedriver)
+[![OCR](https://img.shields.io/badge/OCR-Tesseract-blueviolet)](https://github.com/UB-Mannheim/tesseract/wiki)
+
+**Sea Fort RPA AI**, insan kaynakları ve İSG dökümantasyon süreçlerini otomatize etmek amacıyla geliştirilmiş, yapay zeka destekli kurumsal bir RPA (Robotic Process Automation) masaüstü yazılımıdır. 
+
+Sistem, Excel/CSV dosyalarından okuduğu personel verilerini otomatik olarak sisteme kaydeder ve personellere ait 11 farklı zorunlu evrak tipini (Adli Sicil, Kimlik, İSG Talimatları, SGK Giriş vb.) akıllı OCR ve dosya adı baskınlık (Override) algoritmalarıyla teşhis ederek Wellcome (ISG) platformuna firesiz bir şekilde yükler.
 
 ---
 
-## 📜 Dev Note: The "Vibe Coding" Chronicles
+## 🚀 Öne Çıkan Özellikler ve Çözülen Zorluklar (Engine Highlights)
 
-Let’s be honest for a second. As an old-school minded developer at heart, I’ve spent years believing that real software is crafted by typing every single line of code manually, staring at compiler errors until your eyes bleed. 
+Geliştirme sürecinde Selenium ve web mimarisinin getirdiği birçok kronik sorun **asgari zırh mimarileriyle** kökten çözülmüştür:
 
-But times change, and staying stubborn doesn't pay the bills. 
-
-This entire project was built using pure **Vibe Coding**. I sat down, opened an AI assistant, guided the logic, orchestrated the architecture, and let the LLM do the heavy lifting of spitting out lines of code while I focused on the bigger picture. 
-
-Is it pure, hand-crafted artisan code? *Nope.* 
-Does it perfectly automate a tedious job that used to take hours, reducing error rates to zero? *Absolutely.*
-
-Welcome to the new era, where keeping up with the speed of business means vibing with the right tools.
+* **Dosya Adı Mutlak Baskınlığı (AI Override):** Evrak içeriklerinde geçen ortak kelimelerin (Örn: Adli Sicil belgesinin üstünde yazan "T.C. Kimlik No" ibaresinin Kimlik kategorisini tetiklemesi) yapay zekayı yanıltmasını engellemek için **Dosya Adı Baskınlığı** algoritması kurulmuştur. Dosya adında anahtar kelime yakalandığı an içerik taraması bypass edilerek %100 doğru kategori hedeflenir.
+* **Stale Element ve Ajax Postback Kalkanı:** Wellcome platformunun arka planda yürüttüğü senkronize olmayan Ajax Postback işlemleri esnasında Selenium elementlerinin bayatlaması (`StaleElementReferenceException`) akıllı yeniden deneme kalkanıyla (`try-except` retry döngüsü) ekarte edilmiştir. Element bayatladığı an sistem 0.5 saniye içinde en taze DOM elemanını otomatik olarak söküp alır.
+* **Sitedeki İmla Hatalarına Karşı Tam Senkronizasyon:** Sitenin dropdown listesinde yer alan `"Yapılacak İşen Özgü Talimatlar..."` gibi sinsi imla ve yazım hataları, ağırlık matrisine doğrudan entegre edilerek eşleşme kalitesinin kusursuz (10'da 10) olması sağlanmıştır.
+* **Türkçe Karakter Kırıcı (Adaptive Layout):** Küçük/büyük harf dönüşümlerinde ve dosya isimlerinde yaşanan Türkçe karakter karmaşaları (`İ -> I`, `Ç -> C` vb.) özel bir ön işlem katmanıyla standartlaştırılmıştır.
+* **Gelişmiş Enterprise UI:** `CustomTkinter` kütüphanesiyle inşa edilmiş karanlık tema destekli, KPI metriklerini (Başarılı, Kalan, ETA) anlık güncelleyen modern kontrol paneli.
 
 ---
 
-## 🚀 Key Features
+## 🛠️ Kurulum ve Gereksinimler
 
-* **Intelligent Data Entry:** Parses input data seamlessly and maps fields to eliminate manual copy-paste errors.
-* **User-Friendly Desktop GUI:** Built with a clean graphical user interface, allowing non-technical operational staff to run automation tasks with a single click.
-* **Robust Error Handling:** Features real-time error logging and exception handling to ensure continuous workflow without losing progress.
-* **Optimized Performance:** Powered by a headless-capable browser automation engine for fast and background execution.
+Yazılımın çalışabilmesi için sisteminizde Python 3.8+ ve Google Chrome yüklü olmalıdır.
 
----
+### 1. Tesseract OCR Kurulumu (Zorunlu)
+Sistemin görsellerden ve dökümanlardan metin okuyabilmesi için Tesseract OCR motoruna ihtiyacı vardır:
+1. [Tesseract OCR Windows Installer](https://github.com/UB-Mannheim/tesseract/wiki) sayfasından en güncel sürümü indirin ve kurun.
+2. Varsayılan kurulum yolu olan `C:\Program Files\Tesseract-OCR\tesseract.exe` dizinini kontrol edin. Eğer farklı bir yere kurduysanız kodun en üstündeki `pytesseract.pytesseract.tesseract_cmd` yolunu güncelleyin.
 
-## 🛠️ Built With
+### 2. Bağımlılıkların Yüklenmesi
+Proje dizininde bir terminal açarak gerekli tüm kütüphaneleri tek seferde yükleyin:
 
-* **Language:** Python 3.12+
-* **Automation Engine:** Selenium WebDriver
-* **GUI Framework:** Tkinter / CustomTkinter
-* **The Secret Sauce:** AI Prompting & Pure Vibes ✨
-
----
-
-## 📦 Getting Started & Download
-
-You do not need to install Python or any dependencies to run this tool. A pre-compiled executable version is available for quick deployment.
-
-### 1. Download the Executable
-👉 **[Download the Latest .exe Release](https://github.com/[YOUR_GITHUB_USERNAME]/[YOUR_REPO_NAME]/releases/latest)**
-
-### 2. How to Run
-1. Download the `.exe` file from the link above.
-2. Launch the application (your operating system or antivirus might ask for confirmation on the first launch).
-3. Use the GUI to select your data source file, configure your settings, and click **Start/Run**.
-
----
-
-
-
+```bash
+pip install undetected-chromedriver pillow pytesseract pdfplumber pandas openpyxl customtkinter
