@@ -67,7 +67,12 @@ Case conversions and special character mismatches (such as `İ, Ş, Ğ`) frequen
 ### Run Pre-Compiled Binary (No Installation Required)
 For non-technical operational staff, a pre-compiled standalone executable is provided for immediate deployment.
 
-1.  Navigate to the **[Latest Releases]([https://github.com/ahmetsn34/WellcomeISG.exe))** page.
+## 📦 Getting Started & Deployment
+
+### Run Pre-Compiled Binary (No Installation Required)
+For non-technical operational staff, a pre-compiled standalone executable is provided for immediate deployment.
+
+1.  Navigate to the **[Latest Releases](https://github.com/ahmetsn34/WellcomeISG.exe)** page.
 2.  Download the compiled `.exe` file.
 3.  Launch the application and follow the operational instructions below.
 
