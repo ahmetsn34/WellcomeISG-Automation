@@ -14,7 +14,7 @@
 
 ## 📋 Overview
 
-**Sea Fort RPA AI** is a professional, GUI-based desktop automation suite engineered to eliminate high-volume, repetitive human workflows. It automatically parses local data sources (Excel/CSV) and securely executes end-to-end personnel registration and mandatory Occupational Health and Safety (OHS) document filing on the **Wellcome (Azure-based) portal**.
+**Wellcome RPA AI** is a professional, GUI-based desktop automation suite engineered to eliminate high-volume, repetitive human workflows. It automatically parses local data sources (Excel/CSV) and securely executes end-to-end personnel registration and mandatory Occupational Health and Safety (OHS) document filing on the **Wellcome (Azure-based) portal**.
 
 By integrating advanced **PDF parsing (pdfplumber)**, an intelligent **classification engine**, and robust browser safety shields, this application reduces human error rates to zero and slashes administrative overhead by up to 90%.
 
