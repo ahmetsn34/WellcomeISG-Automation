@@ -1,84 +1,74 @@
-# WellcomeRPA AI: Enterprise OHS Document Automation Suite
+# Wellcome ISG Automation
 
-<p align="center">
-  <a href="README.md">🇹🇷 Türkçe</a> | 
-  <a href="README_EN.md">🇺🇸 English</a>
-</p>
+![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
+![CustomTkinter](https://img.shields.io/badge/UI-CustomTkinter-2563EB?style=flat-square)
+![Selenium](https://img.shields.io/badge/Automation-Selenium-43B02A?style=flat-square&logo=selenium&logoColor=white)
+![Windows](https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square)
 
----
+A Python desktop application for personnel registration and occupational health and safety (OHS / ISG) document workflows on the Wellcome portal. It combines a CustomTkinter interface, spreadsheet processing, browser automation, and document text extraction.
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
-[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](https://github.com/)
-[![Framework: CustomTkinter](https://img.shields.io/badge/UI-CustomTkinter-orange.svg)](https://github.com/TomSchimansky/CustomTkinter)
-[![Automation: Selenium Stealth](https://img.shields.io/badge/Automation-Undetected__Chromedriver-green.svg)](https://github.com/ultrafunkamsterdam/undetected-chromedriver)
+## What it does
 
-## 📋 Overview
+- Reads personnel records from Excel or CSV and selects rows marked for processing.
+- Validates Turkish identity numbers and normalizes phone numbers and Turkish characters.
+- Matches personnel to local document folders by name.
+- Classifies documents using filename rules, PDF text extraction, and OCR for PDFs and images.
+- Automates portal forms and document uploads through Selenium and `undetected-chromedriver`.
+- Provides Turkish and English interface text, progress reporting, pause controls, and Excel result reports.
 
-**Wellcome RPA AI** is a professional, GUI-based desktop automation suite engineered to eliminate high-volume, repetitive human workflows. It automatically parses local data sources (Excel/CSV) and securely executes end-to-end personnel registration and mandatory Occupational Health and Safety (OHS) document filing on the **Wellcome (Azure-based) portal**.
+Document classification uses keyword rules; its accuracy depends on the files and naming conventions. Portal automation also depends on the current portal layout and account permissions.
 
-By integrating advanced **PDF parsing (pdfplumber)**, an intelligent **classification engine**, and robust browser safety shields, this application reduces human error rates to zero and slashes administrative overhead by up to 90%.
+## Run from source
 
----
+The documented entry point is [`ProjectWell.py`](WellcomeISG-Automation-main/ProjectWell.py). The other Python scripts in that directory are separate variants.
 
-## 📜 Dev Note: The "Vibe Coding" Chronicles
+### Prerequisites
 
-Let’s be honest for a second. As an old-school minded developer at heart, I’ve spent years believing that "real software" is only crafted by typing every single line of code manually, staring at compiler errors until your eyes bleed.
+- Windows, Python with Tkinter, and Google Chrome.
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) with the `tur` and `eng` language data. The script currently expects `C:\Program Files\Tesseract-OCR\tesseract.exe`; adjust that assignment in `ProjectWell.py` if needed.
+- Poppler command-line tools available on `PATH` for PDF-to-image conversion. See the [pdf2image installation guide](https://pdf2image.readthedocs.io/en/latest/installation.html).
+- Access to the intended Wellcome environment and permission to manage the relevant personnel records.
 
-But times change, and staying stubborn doesn't pay the bills or keep up with the speed of business.
+### Install and launch
 
-This entire project was built using pure **Vibe Coding**. Instead of getting bogged down in boilerplate code, I sat down, orchestrated the architecture, guided the high-level logic, and let an LLM assistant do the heavy lifting of spitting out thousands of lines of precise UI and automation scripts. 
+Run these commands in PowerShell:
 
-Is it hand-crafted artisan code? *Nope.* 
-Does it perfectly solve a tedious corporate problem that used to take hours, executing with 100% precision? *Absolutely.*
+```powershell
+git clone https://github.com/ahmetsn34/WellcomeISG-Automation.git
+cd WellcomeISG-Automation
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install customtkinter pandas openpyxl selenium undetected-chromedriver pdfplumber pdf2image pytesseract Pillow
+cd WellcomeISG-Automation-main
+..\.venv\Scripts\python.exe ProjectWell.py
+```
 
-Welcome to the new era, where being an efficient engineer means vibing with the right AI tools to deliver bulletproof software at lightning speed.
+Optional packages: `pyttsx3` enables spoken notifications; `python-dotenv` enables the script's `.env` loading hook.
 
----
+Before connecting, review `config.py`, the deployment-specific defaults in `ProjectWell.py`, and the local settings. The browser fallback currently specifies Chrome major version `148`; it may need adjustment for your installed browser. Dependency versions are not pinned in this repository.
 
-## 🚀 Engine Highlights & Technical Shields
+## Prepare the input
 
-Geliştirme sürecinde Selenium ve web mimarisinin getirdiği kronik web portal kararsızlıkları şu asgari zırhlarla kökten çözülmüştür:
+Use an `.xlsx` or `.csv` file with these column names:
 
-### 🧠 Intelligent Classification (AI Override Engine)
-A common problem in document processing is cross-contamination (e.g., a Criminal Record being misidentified as an ID because it contains a "TR Identity Number" string). 
-*   **The Shield:** The engine implements a custom scoring matrix with **Absolute Filename Dominance (+1000 weight)**. If specific patterns exist in the filename, content scanning is safely bypassed to guarantee 100% classification accuracy.
+| Column | Purpose |
+| --- | --- |
+| `ADI SOYADI` | Full name, also used to match the document folder |
+| `T.C. Kimlik Numarası` | Turkish identity number |
+| `TELEFON NUMARASI` | Phone number |
+| `GÖREVİ` | Job role; defaults to `Personel` if empty |
+| `YÜKLEME_DURUMU` | Set to `1` for rows to process |
 
-### 🛡️ Postback & Stale Element Mitigation
-The Wellcome platform utilizes heavy asynchronous Ajax postbacks that constantly cause active browser elements to expire or detach from the live DOM.
-*   **The Shield:** A **"Stale Element Armor"** retry infrastructure. The pipeline catches `StaleElementReferenceException` in real-time, pauses for 0.5s, and re-fetches the freshest active DOM node seamlessly without losing pipeline progress.
+Keep each person's documents in a separate folder named to match `ADI SOYADI`, under the selected document directory. Use descriptive filenames to help the keyword classifier identify document types.
 
-### 🔤 Adaptive Turkish Character Handler
-Case conversions and special character mismatches (such as `İ, Ş, Ğ`) frequently break search and filter inputs within Form element containers.
-*   **The Shield:** A pre-processing character-agnostic abstraction layer standardizes all text metrics before executing Select2 injection queries, ensuring correct record-locking every single time.
+1. Select the spreadsheet and document directory in the application.
+2. Enter the intended account details, then start processing.
+3. Complete login or verification when prompted.
+4. Check the application log, generated report, and uploaded records.
 
----
+For local input files, successful rows are written back with `YÜKLEME_DURUMU` set to `0`. Keep a working copy of the spreadsheet. The application saves connection details, including the password, in a local `settings.json`; keep this file and personnel documents out of version control.
 
-## 🛠️ Built With
+## Project status
 
-*   **GUI Mimarisi:** CustomTkinter / Tkinter (Modern desktop workspace)
-*   **Automation Infrastructure:** Undetected Chromedriver & Selenium WebDriver
-*   **Data Katmanı:** Pandas (Excel and CSV ingestion engine)
-*   **OCR & Extraction:** PDFPlumber & Pytesseract Engine
+This repository contains the source implementation and several development variants. Setup depends on local OCR tools and the target portal environment. Check the configuration and uploaded records in your environment; portal changes can require updates to the browser automation.
 
----
-
-## 📦 Getting Started & Deployment
-
-### Run Pre-Compiled Binary (No Installation Required)
-For non-technical operational staff, a pre-compiled standalone executable is provided for immediate deployment.
-
-## 📦 Getting Started & Deployment
-
-### Run Pre-Compiled Binary (No Installation Required)
-For non-technical operational staff, a pre-compiled standalone executable is provided for immediate deployment.
-
-1.  Navigate to the **[Latest Releases](https://github.com/ahmetsn34/WellcomeISG.exe)** page.
-2.  Download the compiled `.exe` file.
-3.  Launch the application and follow the operational instructions below.
-
-### Developer Environment Setup
-If you wish to run or modify the source code locally:
-
-```bash
-# Install environment dependencies
-pip install undetected-chromedriver pillow pytesseract pdfplumber pandas openpyxl customtkinter
